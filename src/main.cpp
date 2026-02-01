@@ -148,18 +148,20 @@ void opcontrol() {
 
     while (true) {
         // intake motor telemetry
-        double leftIntakeRPM = leftIntakeMotor.get_actual_velocity();
-        double leftIntakeTemp = leftIntakeMotor.get_temperature();
-        double rightIntakeRPM = rightIntakeMotor.get_actual_velocity();
-        double rightIntakeTemp = rightIntakeMotor.get_temperature();
+        int leftIntakeRPM = (int)leftIntakeMotor.get_actual_velocity();
+        int leftIntakeTemp = (int)leftIntakeMotor.get_temperature();
+        double leftIntakePower = leftIntakeMotor.get_power() / 1000.0; // convert mW to W
+        
+        int rightIntakeRPM = (int)rightIntakeMotor.get_actual_velocity();
+        int rightIntakeTemp = (int)rightIntakeMotor.get_temperature();
+        double rightIntakePower = rightIntakeMotor.get_power() / 1000.0; // convert mW to W
 
-        pros::lcd::print(3, "Intake L: %.1f RPM %.1f C",
-                         leftIntakeRPM, leftIntakeTemp);
-        pros::lcd::print(4, "Intake R: %.1f RPM %.1f C",
-                         rightIntakeRPM, rightIntakeTemp);
-        pros::lcd::print(5, "Tounge: %s | Wing: %s",
-                         toungeMech.is_extended() ? "Extended" : "Retracted",
-                         wing.is_extended() ? "Extended" : "Retracted");
+        // Display on controller screen
+        char leftLine[20], rightLine[20];
+        snprintf(leftLine, sizeof(leftLine), "L: %d | %d C | %.1f W", leftIntakeRPM, leftIntakeTemp, leftIntakePower);
+        snprintf(rightLine, sizeof(rightLine), "R: %d | %d C | %.1f W", rightIntakeRPM, rightIntakeTemp, rightIntakePower);
+        controller.set_text(0, 0, leftLine);
+        controller.set_text(1, 0, rightLine);
 
         // brain screen button input
         uint8_t brainBtns = pros::lcd::read_buttons();
