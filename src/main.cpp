@@ -145,6 +145,8 @@ void opcontrol() {
     DriveMode driveMode = DriveMode::TANK; // default drive mode
     pros::lcd::print(0, "Drive: %s",
                      DRIVE_MODE_NAMES[static_cast<int>(driveMode)]);
+    
+    int controllerUpdateCounter = 0; // counter for 50ms updates
 
     while (true) {
         // intake motor telemetry
@@ -156,12 +158,15 @@ void opcontrol() {
         int rightIntakeTemp = (int)rightIntakeMotor.get_temperature();
         double rightIntakePower = rightIntakeMotor.get_power() / 1000.0; // convert mW to W
 
-        // Display on controller screen
-        char leftLine[20], rightLine[20];
-        snprintf(leftLine, sizeof(leftLine), "L: %d | %d C | %.1f W", leftIntakeRPM, leftIntakeTemp, leftIntakePower);
-        snprintf(rightLine, sizeof(rightLine), "R: %d | %d C | %.1f W", rightIntakeRPM, rightIntakeTemp, rightIntakePower);
-        controller.set_text(0, 0, leftLine);
-        controller.set_text(1, 0, rightLine);
+        // Display on controller screen every 50ms (5 iterations of 10ms)
+        if (controllerUpdateCounter % 5 == 0) {
+            char leftLine[20], rightLine[20];
+            snprintf(leftLine, sizeof(leftLine), "L: %d | %d C | %.1f W", leftIntakeRPM, leftIntakeTemp, leftIntakePower);
+            snprintf(rightLine, sizeof(rightLine), "R: %d | %d C | %.1f W", rightIntakeRPM, rightIntakeTemp, rightIntakePower);
+            controller.set_text(0, 0, leftLine);
+            controller.set_text(1, 0, rightLine);
+        }
+        controllerUpdateCounter++;
 
         // brain screen button input
         uint8_t brainBtns = pros::lcd::read_buttons();
@@ -233,6 +238,6 @@ void opcontrol() {
             intake.move(0);
         }
 
-        pros::delay(20); // save resources
+        pros::delay(10); // save resources
     }
 }
