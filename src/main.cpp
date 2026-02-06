@@ -1,75 +1,60 @@
 #include "main.h"
 #include "lemlib/api.hpp" // IWYU pragma: keep
-#include "pros/llemu.hpp"
-#include <cmath>
-
-// controller
-pros::Controller controller(pros::E_CONTROLLER_MASTER);
-
-// intake motors
-pros::Motor leftIntakeMotor(-5, pros::MotorGearset::blue);
-pros::Motor rightIntakeMotor(10, pros::MotorGearset::blue);
-
-// pneumatics
+#include <sys/_intsup.h>
 // tongue mechanism on ADI port D, default retracted
-pros::adi::Pneumatics toungeMech('D', false);
+pros::adi::Pneumatics toungeMech('B', false);
 // wing mechanism on ADI port C, default retracted
 pros::adi::Pneumatics wing('C', false);
-
-// drivetrain motor groups
-// left motors on ports 2, 3, 4 (all reversed)
-pros::MotorGroup leftMotors({-2, -3, -4}, pros::MotorGearset::blue);
-// right motors on ports 7, 8, 9
-pros::MotorGroup rightMotors({7, 8, 9}, pros::MotorGearset::blue);
-
-// intake motor group
-pros::MotorGroup intake({-5, 10}, pros::MotorGearset::blue);
-
+// controller
+pros::Controller controller(pros::E_CONTROLLER_MASTER);
+pros::MotorGroup intake({15, -20}, pros::MotorGearset::blue);
+// motor groups
+pros::MotorGroup leftMotors({-1, -2, -13},
+                            pros::MotorGearset::blue); // left motor group - ports 3 (reversed), 4, 5 (reversed)
+pros::MotorGroup rightMotors({17, 9, 10}, pros::MotorGearset::blue); // right motor group - ports 6, 7, 9 (reversed)
 
 // Inertial Sensor on port 10
-pros::Imu imu(10);
+pros::Imu imu(4);
 
 // tracking wheels
-// horizontal tracking wheel encoder. Rotation sensor, port 20, not reversed
-pros::Rotation horizontalEnc(20);
-// vertical tracking wheel encoder. Rotation sensor, port 11, reversed
-pros::Rotation verticalEnc(-11);
-// horizontal tracking wheel. 2" diameter, 5.75" offset, back of the robot (negative)
-lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_2, -5.75);
-// vertical tracking wheel. 2" diameter, 2.5" offset, left of the robot (negative)
-lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_2, -2.5);
+pros::Rotation verticalEnc(-6);
+pros::Rotation horizontalEnc(19);
+// horizontal tracking wheel. 2.75" diameter, 5.75" offset, back of the robot (negative)
+lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_2, -.25);
+// vertical tracking wheel. 2.75" diameter, 2.5" offset, left of the robot (negative)
+lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_2, -2);
 
 // drivetrain settings
 lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
                               &rightMotors, // right motor group
-                              10, // track width in inches
-                              lemlib::Omniwheel::NEW_325, // 3.25" omnis
-                              450, // drivetrain rpm
-                              8 // horizontal drift (traction wheels)
+                              10.95, // 10 inch track width
+                              lemlib::Omniwheel::NEW_4, // using new 4" omnis
+                              450, // drivetrain rpm is 360
+                              8 // horizontal drift is 2. If we had traction wheels, it would have been 8
 );
 
 // lateral motion controller
-lemlib::ControllerSettings linearController(10, // proportional gain (kP)
-                                            0,  // integral gain (kI)
-                                            3,  // derivative gain (kD)
-                                            3,  // anti windup
-                                            1,  // small error range (inches)
-                                            100, // small error timeout (ms)
-                                            3,  // large error range (inches)
-                                            500, // large error timeout (ms)
-                                            20  // max acceleration (slew)
+lemlib::ControllerSettings linearController(8.3    , // proportional gain (kP)
+                                            0, // integral gain (kI)
+                                            29, // derivative gain (kD)
+                                            0, // anti windup
+                                            0, // small error range, in inches
+                                            0, // small error range timeout, in milliseconds
+                                            0, // large error range, in inches
+                                            0, // large error range timeout, in milliseconds
+                                            0 // maximum acceleration (slew)
 );
 
 // angular motion controller
-lemlib::ControllerSettings angularController(2, // proportional gain (kP)
+lemlib::ControllerSettings angularController(4.5, // proportional gain (kP)
                                              0, // integral gain (kI)
-                                             10, // derivative gain (kD)
-                                             3, // anti windup
-                                             1, // small error range (degrees)
-                                             100, // small error timeout (ms)
-                                             3, // large error range (degrees)
-                                             500, // large error timeout (ms)
-                                             0 // max acceleration (slew)
+                                             31, // derivative gain (kD)
+                                             0, // anti windup
+                                             0, // small error range, in degrees
+                                             0, // small error range timeout, in milliseconds
+                                             0, // large error range, in degrees
+                                             0, // large error range timeout, in milliseconds
+                                             0 // maximum acceleration (slew)
 );
 
 // sensors for odometry
@@ -80,143 +65,89 @@ lemlib::OdomSensors sensors(&vertical, // vertical tracking wheel
                             &imu // inertial sensor
 );
 
-
 // input curve for throttle input during driver control
 lemlib::ExpoDriveCurve throttleCurve(3, // joystick deadband out of 127
                                      10, // minimum output where drivetrain will move out of 127
-                                     1.019 // expo curve gain
+                                     1.2 // expo curve gain
 );
 
 // input curve for steer input during driver control
 lemlib::ExpoDriveCurve steerCurve(3, // joystick deadband out of 127
                                   10, // minimum output where drivetrain will move out of 127
-                                  1.019 // expo curve gain
+                                  1.2 // expo curve gain
 );
 
 // create the chassis
-lemlib::Chassis chassis(drivetrain,
-                        linearController,
-                        angularController,
-                        sensors,
-                        &throttleCurve,
-                        &steerCurve);
-
-// drive mode selection
-enum class DriveMode { TANK = 0, ARCADE = 1, CURVATURE = 2 };
-static const char* DRIVE_MODE_NAMES[] = {"TANK", "ARCADE", "CURVATURE"};
+lemlib::Chassis chassis(drivetrain, linearController, angularController, sensors, &throttleCurve, &steerCurve);
 
 /**
- * Runs initialization code
+ * Runs initialization code. This occurs as soon as the program is started.
+ *
+ * All other competition modes are blocked by initialize; it is recommended
+ * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
     pros::lcd::initialize(); // initialize brain screen
-    pros::lcd::print(0, "Drive: Ready");
+    chassis.calibrate(); // calibrate sensors
+
+    // the default rate is 50. however, if you need to change the rate, you
+    // can do the following.
+    // lemlib::bufferedStdout().setRate(...);
+    // If you use bluetooth or a wired connection, you will want to have a rate of 10ms
+
+    // for more information on how the formatting for the loggers
+    // works, refer to the fmtlib docs
+
+    // thread to for brain screen and position logging
+    pros::Task screenTask([&]() {
+        while (true) {
+            // print robot location to the brain screen
+            pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
+            pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
+            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading
+            // log position telemetry
+            lemlib::telemetrySink()->info("Chassis pose: {}", chassis.getPose());
+            // delay to save resources
+            pros::delay(50);
+        }
+    });
 }
 
-/**
- * Runs during autonomous
- */
 void autonomous() {
-    // simple autonomous routine (unchanged)
-    leftMotors.move(20);
-    rightMotors.move(70);
-    intake.move(90);
-    pros::delay(1675);
+    // set position to x:0, y:0, heading:0
+    chassis.setPose(0, 0, 0);
+chassis.moveToPose(
+    0, // x = 0
+    50.5, 
+    90, 
+    3000,
+    {.lead = 0.3, .maxSpeed = 100 }
+);
+toungeMech.extend();
+wing.extend();
+intake.move(127);
+chassis.moveToPoint(14.0, 43.5, 3000);
+pros::delay(3000);
+intake.move(80);
+chassis.moveToPoint(-28.0, 43.5,  2000, {.forwards = false}, false);
+wing.retract();
+intake.move(127);
 
-    leftMotors.move(50);
-    rightMotors.move(50);
-    pros::delay(850);
-
-    intake.move(-80);
-    pros::delay(1100);
-
-    leftMotors.move(-50);
-    rightMotors.move(-50);
-    pros::delay(100);
-
-    leftMotors.brake();
-    rightMotors.brake();
 }
-
-/**
- * Runs during driver control
+/**     
+ * Runs in driver control
  */
 void opcontrol() {
-    DriveMode driveMode = DriveMode::TANK; // default drive mode
-    pros::lcd::print(0, "Drive: %s",
-                     DRIVE_MODE_NAMES[static_cast<int>(driveMode)]);
-    
-    int controllerUpdateCounter = 0; // counter for 50ms updates
-
+    // controller
+    // loop to continuously update motors
     while (true) {
-        // intake motor telemetry
-        int leftIntakeRPM = (int)leftIntakeMotor.get_actual_velocity();
-        int leftIntakeTemp = (int)leftIntakeMotor.get_temperature();
-        double leftIntakePower = leftIntakeMotor.get_power() / 1000.0; // convert mW to W
-        
-        int rightIntakeRPM = (int)rightIntakeMotor.get_actual_velocity();
-        int rightIntakeTemp = (int)rightIntakeMotor.get_temperature();
-        double rightIntakePower = rightIntakeMotor.get_power() / 1000.0; // convert mW to W
-
-        // Display on controller screen every 50ms (5 iterations of 10ms)
-        if (controllerUpdateCounter % 5 == 0) {
-            char leftLine[20], rightLine[20];
-            snprintf(leftLine, sizeof(leftLine), "L: %d | %d C | %.1f W", leftIntakeRPM, leftIntakeTemp, leftIntakePower);
-            snprintf(rightLine, sizeof(rightLine), "R: %d | %d C | %.1f W", rightIntakeRPM, rightIntakeTemp, rightIntakePower);
-            controller.set_text(0, 0, leftLine);
-            controller.set_text(1, 0, rightLine);
-        }
-        controllerUpdateCounter++;
-
-        // brain screen button input
-        uint8_t brainBtns = pros::lcd::read_buttons();
-        bool btnLeft = brainBtns & LCD_BTN_LEFT;
-        bool btnCenter = brainBtns & LCD_BTN_CENTER;
-        bool btnRight = brainBtns & LCD_BTN_RIGHT;
-
-        // left button toggles wing
-        static bool lastBtnLeft = false;
-        if (btnLeft && !lastBtnLeft) {
-            wing.toggle();
-        }
-        lastBtnLeft = btnLeft;
-
-        // center button = intake forward
-        // right button = intake reverse
-        if (btnCenter) {
-            intake.move(127);
-        } else if (btnRight) {
-            intake.move(-127);
-        }
-
-        // joystick input
+        // get joystick positions
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-        int rightY = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y);
-
-        // cycle drive mode with Y button
-        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_Y)) {
-            driveMode = static_cast<DriveMode>(
-                (static_cast<int>(driveMode) + 1) % 3
-            );
-            pros::lcd::print(0, "Drive: %s",
-                             DRIVE_MODE_NAMES[static_cast<int>(driveMode)]);
-        }
-
-        // drive control
-        switch (driveMode) {
-            case DriveMode::TANK:
-                chassis.tank(leftY, rightY);
-                break;
-            case DriveMode::ARCADE:
-                chassis.arcade(leftY, rightX);
-                break;
-            case DriveMode::CURVATURE:
-                chassis.curvature(leftY, rightX);
-                break;
-        }
-
-        // R2 controls wing (hold = extend)
+        // move the chassis with curvature drive
+        chassis.arcade(leftY, rightX);
+        
+        // R2 extends/retracts wing
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             wing.extend();
         } else {
@@ -237,7 +168,9 @@ void opcontrol() {
         } else {
             intake.move(0);
         }
-
-        pros::delay(10); // save resources
+        
+        // delay to save resources
+        pros::delay(10);
     }
 }
+
