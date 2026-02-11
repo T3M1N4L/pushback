@@ -11,7 +11,7 @@ pros::Controller controller(pros::E_CONTROLLER_MASTER);
 pros::MotorGroup leftMotors({-1, -2, -7},
                             pros::MotorGearset::blue); // left motor group - ports 3 (reversed), 4, 5 (reversed)
 pros::MotorGroup rightMotors({10, 9, 17}, pros::MotorGearset::blue); // right motor group - ports 6, 7, 9 (reversed)
-pros::MotorGroup intake({3, -8}, pros::MotorGearset::blue);
+pros::MotorGroup intake({3, -18}, pros::MotorGearset::blue);
  
 // Inertial Sensor on port 10
 pros::Imu imu(4);
@@ -34,15 +34,15 @@ lemlib::Drivetrain drivetrain(&leftMotors, // left motor group
 );
  
 // lateral motion controller
-lemlib::ControllerSettings linearController(11    , // proportional gain (kP)
+lemlib::ControllerSettings linearController(8.5  , // proportional gain (kP)
                                             0, // integral gain (kI)
-                                            38, // derivative gain (kD)
+                                            43, // derivative gain (kD)
                                               3, // anti windup
                                               1, // small error range, in inches
                                               100, // small error range timeout, in milliseconds
                                               3, // large error range, in inches
                                               500, // large error range timeout, in milliseconds
-                                              20 // maximum acceleration (slew)
+                                              110 // maximum acceleration (slew)
 );
  
 // angular motion controller
@@ -121,7 +121,7 @@ void initialize() {
     // turn to face heading 90 with a very long timeout
         toungeMech.extend();
     chassis.moveToPose(
-        -46.5, // x = 0
+        -47.5,// = 0
         -48.8, // y = 0
         270,
         5000, // timeout of 4000ms
@@ -142,7 +142,7 @@ void initialize() {
     pros::delay(3000);
     chassis.moveToPose(
        -33, // x = 0
-        -48.8, // y = 0
+        -48.5,// y = 0
         270,
         5000, // timeout of 4000ms
         {.forwards = false},
@@ -163,69 +163,156 @@ void skillsAuton(){
         toungeMech.extend();
 // align w the 
     chassis.moveToPose(
-        -46.5, // x = 0
-        -48.8, // y = 0
+        -54, // x = 0
+        -48, // y = 0
         270, // theta = 0
         5000, // timeout of 4000ms
         {.lead=0, .maxSpeed = 70},
-        false
+        true
     );
 
      wing.extend();
      intake.move(127);
-    chassis.moveToPose(
-        -57, // x = 0
-        -48.8, // y = 0
-        270, // theta = 0
-        5000, // timeout of 4000ms
-        {.forwards = true},
-        false
-    );
+
     pros::delay(3000);
             chassis.moveToPose(
        -12, // x = 0
-        -60, // y = 0
+        -61, // y = 0
         270, // theta = 0
-        5000, // timeout of 4000ms
+        2000, // timeout of 4000ms
         {.forwards = false, .lead= 0.3},
-        false
+        true
         );
   intake.move(0);
 toungeMech.retract();
+            chassis.moveToPose(
+       40, // x = 0
+        -57, // y = 0
+        225, // theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = false, .lead=0},
+        false
+        );
 
     chassis.moveToPose(
-        48, // x = 0
-        -56, // y = 0
-        90, // timeout of 4000ms
-        5000,
+        36, // x = 0
+        -40, // y = 0
+        45, // timeout of 4000ms
+        6000,
         {.forwards = false},
         false
         );
-            chassis.moveToPose(
-        34, // x = 0
-        -54, // y = 0
-        100, // timeout of 4000ms
-        5000,
+    chassis.moveToPose(
+        30, // x = 0
+        -55, // y = 0
+        90, // theta = 0
+       5000, // timeout of 4000ms
         {.forwards = false},
         false
-        );       
+        );
         wing.retract();
         intake.move(127);
-        pros::delay(2000);
-        wing.extend();
+       pros::delay(3000);
         toungeMech.extend();
+        wing.extend();
         chassis.moveToPose(
-        34, // x = 0
-        -54, // y = 0
-        100, // timeout of 4000ms
-        5000,
+        64, // x = 0
+        -56.5, // y = 0
+        90, // theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true},
+        false
+        );
+        pros::delay(3000);
+        chassis.moveToPose(
+        30, // x = 0
+        -56, // y = 0
+        90, // theta = 0
+        5000, // timeout of 4000ms
         {.forwards = false},
         false
-        );       
-}
+        );
+        wing.retract();
+        pros::delay(3000);
+        toungeMech.retract();
+        intake.move(0);
+                chassis.moveToPose(
+        54, // x = 0
+        -56, // y = 0
+        0, // theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true},
+        false
+        );
+                chassis.moveToPose(
+        64, // x = 0
+        43, // y = 0
+        90, // theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true, .lead=0},
+        false
+        );
+        toungeMech.extend();
+        wing.extend();
+        intake.move(127);
+        chassis.moveToPose(
+        71,// = 0
+        44.5, // y = 0
+        90, // theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = false, .lead=0},
+        false
+        );
+        pros::delay(3000);
+                chassis.moveToPose(
+        21,//x = 0
+        44.5, // y = 0
+        90, // theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = false, .lead=0},
+        false
+        );
+        wing.retract();
+pros::delay(3000);
+        toungeMech.retract();
+        intake.move(0);
+                chassis.moveToPose(
+        41,//x = 0
+        44,// y = 0
+        180,// theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true, .lead=0},
+        false
+        );
+        chassis.moveToPose(
+        41,//x = 0
+        24,//y = 0
+        270,// theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true, .lead=0},
+        false
+        );
+        chassis.moveToPose(
+        -59,//x = 0
+        24,//y = 0
+        270,// theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true, .lead=0},
+        false
+        );
+        chassis.turnToHeading(180, 5000);
+        chassis.moveToPose(
+        -63, // 0
+        24,//y = 0
+        270,// theta = 0
+        5000, // timeout of 4000ms
+        {.forwards = true, .lead=0},
+        false
+        );
+    }
 void autonomous() {
-    skillsAuton();
-}
+skillsAuton();
+    }
 /**     
  * Runs in driver control
  */
