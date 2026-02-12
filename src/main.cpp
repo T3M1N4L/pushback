@@ -1,5 +1,7 @@
 #include "main.h"
+#include "autons.hpp"
 #include "pid_tuner.hpp"
+#include "robodash/api.h"
 #include <sys/_intsup.h>
 
 // Pneumatic mechanisms
@@ -46,6 +48,18 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController,
 
 // Create PID tuner
 PIDTuner pidTuner(chassis, controller);
+
+// Create robodash console
+rd::Console console;
+
+// Create robodash selector with autonomous routines
+// Format: {"Name", function, "image_path", color_hue}
+// color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
+rd::Selector selector({
+    {"Competition Auton", compAuton, "", 0},      // Red
+    {"Skills Auton", skillsAuton, "", 220},       // Blue
+    {"Do Nothing", doNothing, "", 120}            // Green
+});
  
 /**
  * Runs initialization code. This occurs as soon as the program is started.
@@ -55,7 +69,13 @@ PIDTuner pidTuner(chassis, controller);
  */
 void initialize() {
     pros::lcd::initialize(); // initialize brain screen
+    
+    console.println("Initializing robot...");
+    console.println("Calibrating sensors...");
+    
     chassis.calibrate(); // calibrate sensors
+    
+    console.println("Calibration complete!");
  
     // Set initial PID values for the tuner to match your current configuration
     pidTuner.pid_tuner_set_linear(8.5, 0, 43, 3);  // Match linearController settings
@@ -66,6 +86,17 @@ void initialize() {
     pidTuner.pid_tuner_increment_i_set(0.001);
     pidTuner.pid_tuner_increment_d_set(0.5);
     pidTuner.pid_tuner_increment_windup_set(0.1);
+    
+    console.println("Robot initialized successfully!");
+    
+    // Selector callback - logs when an auton is selected
+    selector.on_select([](std::optional<rd::Selector::routine_t> routine) {
+        if (routine == std::nullopt) {
+            console.println("No autonomous selected");
+        } else {
+            console.printf("Selected: %s\n", routine.value().name.c_str());
+        }
+    });
  
     // the default rate is 50. however, if you need to change the rate, you
     // can do the following.
@@ -90,17 +121,35 @@ void initialize() {
         }
     });
 }
-void compAuton(){
+
+/**
+ * Runs once when entering disabled mode
+ */
+void disabled() {}
+
+/**
+ * Runs once when competition control is connected
+ * Use this to focus the selector on screen
+ */
+void competition_initialize() {
+    // Show the auton selector on screen when connected to competition switch
+    selector.focus();
 }
-void skillsAuton(){
-}
+
+/**
+ * Runs the autonomous routine
+ */
 void autonomous() {
-skillsAuton();
-    }
+    console.println("=== AUTONOMOUS STARTED ===");
+    selector.run_auton();
+    console.println("=== AUTONOMOUS COMPLETE ===");
+}
 /**     
  * Runs in driver control
  */
 void opcontrol() {
+    console.println("=== DRIVER CONTROL STARTED ===");
+    
     // controller
     // loop to continuously update motors
     while (true) {
@@ -121,7 +170,7 @@ void opcontrol() {
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         // move the chassis with curvature drive
-        chassis.arcade(leftY, rightX);
+        chassis.curvature(leftY, rightX);
  
  
         // delay to save resources
