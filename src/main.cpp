@@ -68,7 +68,6 @@ rd::Selector selector({
  * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
-    pros::lcd::initialize(); // initialize brain screen
     
     console.println("Initializing robot...");
     console.println("Calibrating sensors...");
