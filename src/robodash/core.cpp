@@ -1,4 +1,5 @@
 #include "robodash/apix.h"
+#include "pros/misc.hpp"
 
 const int view_menu_width = 192;
 
@@ -13,6 +14,9 @@ lv_obj_t *view_list;
 lv_obj_t *alert_cont;
 lv_obj_t *alert_btn;
 lv_obj_t *anim_label;
+lv_obj_t *battery_icon;
+lv_obj_t *battery_percent;
+lv_obj_t *battery_charging;
 
 lv_anim_t anim_sidebar_open;
 lv_anim_t anim_sidebar_close;
@@ -20,6 +24,10 @@ lv_anim_t anim_shade_hide;
 lv_anim_t anim_shade_show;
 
 rd_view_t *current_view;
+
+// ========================== Forward Declarations ========================== //
+
+void update_battery_indicator();
 
 // ============================ Helper Functions============================ //
 
@@ -45,6 +53,9 @@ void view_focus_cb(lv_event_t *event) {
 void views_btn_cb(lv_event_t *event) {
 	lv_obj_clear_flag(view_menu, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_clear_flag(shade, LV_OBJ_FLAG_HIDDEN);
+	
+	// Update battery when view menu opens
+	update_battery_indicator();
 
 	if (rd_view_get_anims(current_view) == RD_ANIM_ON) {
 		lv_anim_start(&anim_sidebar_open);
@@ -94,6 +105,51 @@ void alert_cb(lv_event_t *event) {
 	}
 }
 
+// ============================ Battery Update ============================ //
+
+void update_battery_indicator() {
+	if (!battery_icon || !battery_percent) return;
+	
+	double capacity = pros::battery::get_capacity();
+	int32_t current = pros::battery::get_current();
+	
+	// Update percentage text
+	char battery_text[8];
+	snprintf(battery_text, sizeof(battery_text), "%.0f%%", capacity);
+	lv_label_set_text(battery_percent, battery_text);
+	
+	// Determine color based on capacity
+	lv_color_t battery_color;
+	if (capacity > 90.0) {
+		battery_color = lv_color_hex(0x22c55e);  // Green (same as motor telemetry)
+	} else if (capacity < 10.0) {
+		battery_color = lv_color_hex(0xef4444);  // Red (same as motor telemetry)
+	} else if (capacity < 30.0) {
+		battery_color = lv_color_hex(0xeab308);  // Yellow (same as motor telemetry)
+	} else {
+		battery_color = lv_color_hex(0xFFFFFF);  // White
+	}
+	
+	// Determine icon based on capacity
+	const char *battery_symbol;
+	if (capacity > 75.0) {
+		battery_symbol = LV_SYMBOL_BATTERY_FULL;
+	} else if (capacity > 50.0) {
+		battery_symbol = LV_SYMBOL_BATTERY_3;
+	} else if (capacity > 25.0) {
+		battery_symbol = LV_SYMBOL_BATTERY_2;
+	} else if (capacity > 10.0) {
+		battery_symbol = LV_SYMBOL_BATTERY_1;
+	} else {
+		battery_symbol = LV_SYMBOL_BATTERY_EMPTY;
+	}
+	
+	// Apply updates
+	lv_img_set_src(battery_icon, battery_symbol);
+	lv_obj_set_style_img_recolor(battery_icon, battery_color, 0);
+	lv_obj_set_style_text_color(battery_percent, battery_color, 0);
+}
+
 // =========================== UI Initialization =========================== //
 
 void create_ui() {
@@ -115,9 +171,10 @@ void create_ui() {
 	lv_obj_add_event_cb(views_open_btn, views_btn_cb, LV_EVENT_PRESSED, NULL);
 
 	lv_obj_t *open_img = lv_img_create(views_open_btn);
-	lv_img_set_src(open_img, &stack);
+	lv_img_set_src(open_img, LV_SYMBOL_BARS);
 	lv_obj_set_style_img_recolor(open_img, color_text, 0);
 	lv_obj_set_style_img_recolor_opa(open_img, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(open_img, 2, 0);
 	lv_obj_align(open_img, LV_ALIGN_CENTER, 0, 0);
 
 	alert_btn = lv_btn_create(screen);
@@ -179,6 +236,24 @@ void create_ui() {
 	lv_obj_add_flag(anim_label, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_set_style_text_font(anim_label, &lv_font_montserrat_10, 0);
 
+	// Battery indicator (bottom right)
+	battery_icon = lv_img_create(view_menu);
+	lv_img_set_src(battery_icon, LV_SYMBOL_BATTERY_FULL);
+	lv_obj_align(battery_icon, LV_ALIGN_BOTTOM_RIGHT, -8, -8);
+	lv_obj_set_style_img_recolor(battery_icon, lv_color_hex(0x22c55e), 0);
+	lv_obj_set_style_img_recolor_opa(battery_icon, LV_OPA_COVER, 0);
+
+	battery_percent = lv_label_create(view_menu);
+	lv_label_set_text(battery_percent, "100%");
+	lv_obj_set_style_text_font(battery_percent, &lv_font_montserrat_10, 0);
+	lv_obj_set_style_text_color(battery_percent, lv_color_hex(0x22c55e), 0);
+	lv_obj_align_to(battery_percent, battery_icon, LV_ALIGN_OUT_LEFT_MID, -2, 0);
+
+	battery_charging = lv_label_create(view_menu);
+	lv_label_set_text(battery_charging, LV_SYMBOL_CHARGE);
+	lv_obj_align_to(battery_charging, battery_icon, LV_ALIGN_CENTER, 0, 0);
+	lv_obj_add_flag(battery_charging, LV_OBJ_FLAG_HIDDEN);  // Hidden by default
+
 	// -------------------------- Alert Container -------------------------- //
 
 	alert_cont = lv_obj_create(screen);
@@ -225,6 +300,39 @@ void create_anims() {
 
 // =============================== Initialize =============================== //
 
+void battery_charging_update_task() {
+	while (true) {
+		if (battery_charging && battery_icon) {
+			int32_t current = pros::battery::get_current();
+			double capacity = pros::battery::get_capacity();
+			
+			if (current < 0) {
+				lv_obj_clear_flag(battery_charging, LV_OBJ_FLAG_HIDDEN);
+				lv_obj_align_to(battery_charging, battery_icon, LV_ALIGN_CENTER, 0, 0);
+				
+				// Set color: green when battery is white (30-90%), white when battery is colored
+				lv_color_t charging_color;
+				if (capacity >= 30.0 && capacity <= 90.0) {
+					charging_color = lv_color_hex(0x22c55e);  // Green
+				} else {
+					charging_color = lv_color_hex(0xFFFFFF);  // White
+				}
+				lv_obj_set_style_text_color(battery_charging, charging_color, 0);
+			} else {
+				lv_obj_add_flag(battery_charging, LV_OBJ_FLAG_HIDDEN);
+			}
+		}
+		pros::delay(100);  // Fast update for charging indicator
+	}
+}
+
+void battery_update_task() {
+	while (true) {
+		update_battery_indicator();
+		pros::delay(1000);  // Update every second
+	}
+}
+
 bool initialized = false;
 
 void initialize() {
@@ -235,6 +343,10 @@ void initialize() {
 
 	create_ui();
 	create_anims();
+	
+	// Start battery update tasks
+	pros::Task battery_task(battery_update_task);
+	pros::Task charging_task(battery_charging_update_task);
 
 	initialized = true;
 }

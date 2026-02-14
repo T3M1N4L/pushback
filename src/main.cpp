@@ -56,31 +56,18 @@ PIDTuner pidTuner(chassis, controller, &console);
 // Format: {"Name", function, "image_path", color_hue}
 // color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
 rd::Selector selector({
-    {"Competition Auton", doNothing, "", 0},      // Red
-    {"Skills Auton", doNothing, "", 220},       // Blue
+    {"Competition Auton", compAuton, "", 0},      // Red
+    {"Skills Auton", skillsAuton, "", 220},       // Blue
     {"Do Nothing", doNothing, "", 120}            // Green
 });
 
-// Create motor telemetry screen
-rd::MotorTelemetry motorTelemetry("Motor Telemetry", 6);
+// Create motor telemetry screen (auto-detects motor count from groups)
+rd::MotorTelemetry motorTelemetry("Motor Telemetry", {
+    {&leftMotors, "L-DRIVE"},
+    {&rightMotors, "R-DRIVE"},
+    {&intake, "INTAKE"}
+});
 
-/**
- * Helper function to add motor group data to telemetry
- */
-void add_motor_group_data(std::vector<rd::motor_data_t> &motors, pros::MotorGroup &group, 
-                          const std::vector<int> &ports, const char *name) {
-    auto vels = group.get_actual_velocity_all();
-    auto powers = group.get_power_all();
-    auto currents = group.get_current_draw_all();
-    auto temps = group.get_temperature_all();
-    auto torques = group.get_torque_all();
-    
-    for (size_t i = 0; i < ports.size(); i++) {
-        motors.push_back({ports[i], name, (float)vels[i], (float)(powers[i]/1000.0f),
-                         (float)(currents[i]/1000.0f), (float)temps[i], (float)(torques[i]/100.0f)});
-    }
-}
- 
 /**
  * Runs initialization code. This occurs as soon as the program is started.
  *
@@ -148,10 +135,7 @@ void initialize() {
     // Background task to update motor telemetry
     pros::Task telemetryTask([&]() {
         while (true) {
-            std::vector<rd::motor_data_t> motors;
-            add_motor_group_data(motors, leftMotors, {1, 2, 7}, "L-DRIVE");
-            add_motor_group_data(motors, rightMotors, {10, 9, 17}, "R-DRIVE");
-            motorTelemetry.update(motors);
+            motorTelemetry.auto_update();
             pros::delay(50);
         }
     });

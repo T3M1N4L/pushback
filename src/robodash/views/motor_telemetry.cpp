@@ -1,5 +1,6 @@
 #include "robodash/views/motor_telemetry.hpp"
 #include "robodash/apix.h"
+#include "pros/motor_group.hpp"
 #include <cmath>
 
 // ============================= Color Definitions ============================= //
@@ -26,7 +27,6 @@
 
 static const char *metric_labels[] = {"VEL", "PWR", "CUR", "TEMP", "TRQ"};
 static const char *metric_units[] = {"RPM", "W", "A", "C", "Nm"};
-static const float metric_max[] = {600.0f, 11.0f, 2.5f, 65.0f, 2.5f};
 
 static lv_color_t get_metric_color(int metric_index) {
 	switch (metric_index) {
@@ -55,35 +55,28 @@ static float get_metric_value(const rd::motor_data_t &data, int metric_index) {
 	}
 }
 
-// ============================= Tab Click Callback ============================= //
+// ============================= Arrow Click Callbacks ============================= //
 
-void rd::MotorTelemetry::tab_click_cb(lv_event_t *event) {
-	lv_obj_t *target = lv_event_get_target(event);
+void rd::MotorTelemetry::left_arrow_cb(lv_event_t *event) {
 	rd::MotorTelemetry *screen = (rd::MotorTelemetry *)lv_event_get_user_data(event);
+	if (!screen) return;
 	
-	// Find which tab was clicked
-	for (int i = 0; i < 5; i++) {
-		if (screen->tabs[i] == target) {
-			screen->active_metric = i;
-			
-			// Update tab styles
-			for (int j = 0; j < 5; j++) {
-				if (j == i) {
-					// Active tab style
-					lv_obj_set_style_bg_color(screen->tabs[j], get_metric_color(i), 0);
-					lv_obj_set_style_text_color(screen->tabs[j], lv_color_hex(0x000000), 0);
-					lv_obj_set_style_border_width(screen->tabs[j], 0, 0);
-				} else {
-					// Inactive tab style
-					lv_obj_set_style_bg_color(screen->tabs[j], COLOR_CARD_BG, 0);
-					lv_obj_set_style_text_color(screen->tabs[j], COLOR_TEXT_DIM, 0);
-					lv_obj_set_style_border_width(screen->tabs[j], 1, 0);
-					lv_obj_set_style_border_color(screen->tabs[j], color_border, 0);
-				}
-			}
-			break;
-		}
-	}
+	// Cycle to previous metric (wraps around)
+	screen->active_metric--;
+	if (screen->active_metric < 0) screen->active_metric = 4;
+	
+	screen->update_metric_label();
+}
+
+void rd::MotorTelemetry::right_arrow_cb(lv_event_t *event) {
+	rd::MotorTelemetry *screen = (rd::MotorTelemetry *)lv_event_get_user_data(event);
+	if (!screen) return;
+	
+	// Cycle to next metric (wraps around)
+	screen->active_metric++;
+	if (screen->active_metric > 4) screen->active_metric = 0;
+	
+	screen->update_metric_label();
 }
 
 // ============================= Constructor ============================= //
@@ -92,6 +85,7 @@ rd::MotorTelemetry::MotorTelemetry(std::string name, int motor_count) {
 	this->view = rd_view_create(name.c_str());
 	this->active_metric = 0; // Start with Velocity
 	this->motor_count = motor_count > 8 ? 8 : (motor_count < 1 ? 1 : motor_count);
+	this->has_stored_groups = false;
 
 	// Set pure black background and account for 32px top bar
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
@@ -101,6 +95,31 @@ rd::MotorTelemetry::MotorTelemetry(std::string name, int motor_count) {
 	// Initialize UI components
 	init_header();
 	init_motor_grid(this->motor_count);
+	update_metric_label();
+}
+
+rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups) {
+	this->view = rd_view_create(name.c_str());
+	this->active_metric = 0; // Start with Velocity
+	this->has_stored_groups = true;
+	this->stored_groups = groups;
+	
+	// Count total motors from all groups
+	int total_motors = 0;
+	for (const auto &[group, name] : groups) {
+		total_motors += group->get_port_all().size();
+	}
+	this->motor_count = total_motors > 8 ? 8 : (total_motors < 1 ? 1 : total_motors);
+
+	// Set pure black background and account for 32px top bar
+	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
+	lv_obj_set_style_pad_top(view->obj, 0, 0);
+	lv_obj_set_height(view->obj, 240); // 272 - 32 = 240
+
+	// Initialize UI components
+	init_header();
+	init_motor_grid(this->motor_count);
+	update_metric_label();
 }
 
 // ============================= Header Initialization ============================= //
@@ -116,64 +135,47 @@ void rd::MotorTelemetry::init_header() {
 	lv_obj_set_style_radius(header_bar, 0, 0);
 	lv_obj_clear_flag(header_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-	// Create tabs container (LEFT-aligned in header)
-	lv_obj_t *tabs_container = lv_obj_create(header_bar);
-	lv_obj_set_size(tabs_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-	lv_obj_set_style_bg_opa(tabs_container, LV_OPA_TRANSP, 0);
-	lv_obj_set_style_border_width(tabs_container, 0, 0);
-	lv_obj_set_style_pad_all(tabs_container, 0, 0);
-	lv_obj_align(tabs_container, LV_ALIGN_LEFT_MID, 8, 0);
-	lv_obj_set_flex_flow(tabs_container, LV_FLEX_FLOW_ROW);
-	lv_obj_set_flex_align(tabs_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-	lv_obj_set_style_pad_column(tabs_container, 2, 0);
-	lv_obj_clear_flag(tabs_container, LV_OBJ_FLAG_SCROLLABLE);
+	// Left arrow button (closer to center)
+	left_arrow = lv_btn_create(header_bar);
+	lv_obj_add_style(left_arrow, &style_transp, 0);
+	lv_obj_set_size(left_arrow, 48, 30);
+	lv_obj_set_style_pad_all(left_arrow, 0, 0);
+	lv_obj_align(left_arrow, LV_ALIGN_LEFT_MID, 120, 0);
+	lv_obj_add_event_cb(left_arrow, left_arrow_cb, LV_EVENT_CLICKED, this);
+	lv_obj_set_style_text_opa(left_arrow, 128, LV_STATE_PRESSED);
 
-	// Create 5 metric tabs
-	for (int i = 0; i < 5; i++) {
-		tabs[i] = lv_btn_create(tabs_container);
-		lv_obj_set_size(tabs[i], LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-		lv_obj_set_style_radius(tabs[i], 2, 0);
-		lv_obj_set_style_pad_ver(tabs[i], 2, 0);
-		lv_obj_set_style_pad_hor(tabs[i], 6, 0);
-		lv_obj_set_style_min_width(tabs[i], 30, 0);
-		
-		// Initial style (inactive)
-		lv_obj_set_style_bg_color(tabs[i], COLOR_CARD_BG, 0);
-		lv_obj_set_style_text_color(tabs[i], COLOR_TEXT_DIM, 0);
-		lv_obj_set_style_border_width(tabs[i], 1, 0);
-		lv_obj_set_style_border_color(tabs[i], color_border, 0);
+	lv_obj_t *left_img = lv_img_create(left_arrow);
+	lv_obj_align(left_img, LV_ALIGN_CENTER, 0, 0);
+	lv_img_set_src(left_img, LV_SYMBOL_LEFT);
 
-		// Label
-		lv_obj_t *label = lv_label_create(tabs[i]);
-		lv_label_set_text(label, metric_labels[i]);
-		lv_obj_set_style_text_font(label, &lv_font_montserrat_10, 0);
-		lv_obj_center(label);
+	// Center metric label
+	metric_label = lv_label_create(header_bar);
+	lv_label_set_text(metric_label, "VELOCITY");
+	lv_obj_set_style_text_font(metric_label, &lv_font_montserrat_14, 0);
+	lv_obj_set_style_pad_all(metric_label, 0, 0);
+	lv_obj_align(metric_label, LV_ALIGN_CENTER, 0, 0);
 
-		// Add click event
-		lv_obj_add_event_cb(tabs[i], tab_click_cb, LV_EVENT_CLICKED, this);
-	}
+	// Right arrow button (closer to center)
+	right_arrow = lv_btn_create(header_bar);
+	lv_obj_add_style(right_arrow, &style_transp, 0);
+	lv_obj_set_size(right_arrow, 48, 30);
+	lv_obj_set_style_pad_all(right_arrow, 0, 0);
+	lv_obj_align(right_arrow, LV_ALIGN_RIGHT_MID, -120, 0);
+	lv_obj_add_event_cb(right_arrow, right_arrow_cb, LV_EVENT_CLICKED, this);
+	lv_obj_set_style_text_opa(right_arrow, 128, LV_STATE_PRESSED);
 
-	// Set first tab active
-	lv_obj_set_style_bg_color(tabs[0], COLOR_VEL, 0);
-	lv_obj_set_style_text_color(tabs[0], lv_color_hex(0x000000), 0);
-	lv_obj_set_style_border_width(tabs[0], 0, 0);
-
-	// Divider - 1px height
-	divider = lv_obj_create(view->obj);
-	lv_obj_set_size(divider, LV_PCT(100), 1);
-	lv_obj_set_pos(divider, 0, 30);
-	lv_obj_set_style_bg_color(divider, color_border, 0);
-	lv_obj_set_style_border_width(divider, 0, 0);
-	lv_obj_set_style_radius(divider, 0, 0);
+	lv_obj_t *right_img = lv_img_create(right_arrow);
+	lv_obj_align(right_img, LV_ALIGN_CENTER, 0, 0);
+	lv_img_set_src(right_img, LV_SYMBOL_RIGHT);
 }
 
 // ============================= Motor Grid Initialization ============================= //
 
 void rd::MotorTelemetry::init_motor_grid(int count) {
-	// Motor grid fills remaining height (240 - 31 = 209px available)
+	// Motor grid fills remaining height (240 - 30 = 210px available)
 	motor_grid = lv_obj_create(view->obj);
-	lv_obj_set_size(motor_grid, LV_PCT(100), 209);
-	lv_obj_set_pos(motor_grid, 0, 31);
+	lv_obj_set_size(motor_grid, LV_PCT(100), 210);
+	lv_obj_set_pos(motor_grid, 0, 30);
 	lv_obj_set_style_bg_color(motor_grid, color_bg, 0);
 	lv_obj_set_style_border_width(motor_grid, 0, 0);
 	lv_obj_set_style_radius(motor_grid, 0, 0);
@@ -197,9 +199,9 @@ void rd::MotorTelemetry::init_motor_grid(int count) {
 	// Use grid layout
 	lv_obj_set_layout(motor_grid, LV_LAYOUT_GRID);
 	
-	// Calculate cell sizes (209 - 12 padding = 197px available height)
+	// Calculate cell sizes (210 - 12 padding = 198px available height)
 	int grid_width = 480 - 12; // 6px padding on each side
-	int grid_height = 209 - 12;
+	int grid_height = 210 - 12;
 	int gap = 6;
 	
 	int cell_width = (grid_width - (cols - 1) * gap) / cols;
@@ -320,10 +322,12 @@ void rd::MotorTelemetry::init_motor_card(int index, bool is_small) {
 	lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, 0);
 	lv_obj_set_style_bg_color(bar, COLOR_PROGRESS_TRACK, 0);
 	lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+	lv_obj_set_style_border_width(bar, 0, 0);
 	lv_obj_set_style_radius(bar, 0, 0);
 	lv_bar_set_range(bar, 0, 100);
 	lv_bar_set_value(bar, 0, LV_ANIM_OFF);
 	lv_obj_set_style_bg_color(bar, COLOR_VEL, LV_PART_INDICATOR);
+	lv_obj_set_style_border_width(bar, 0, LV_PART_INDICATOR);
 	lv_obj_set_style_radius(bar, 0, LV_PART_INDICATOR);
 	lv_obj_set_style_anim_time(bar, 150, 0); // 150ms animation
 	cards[index].progress_bar = bar;
@@ -384,8 +388,20 @@ void rd::MotorTelemetry::update_metric_display(int index, const motor_data_t &da
 	lv_color_t value_color = (active_metric == 3) ? get_temp_color(data.temp_c) : get_metric_color(active_metric);
 	lv_obj_set_style_text_color(cards[index].value_label, value_color, 0);
 
-	// Update progress bar
-	float max_val = metric_max[active_metric];
+	// Update progress bar with gearset-based max for velocity
+	float max_val;
+	if (active_metric == 0) { // Velocity - use gearset
+		switch (data.gearset) {
+			case 0: max_val = 100.0f; break;  // Red
+			case 1: max_val = 200.0f; break;  // Green
+			case 2: max_val = 600.0f; break;  // Blue
+			default: max_val = 600.0f; break;
+		}
+	} else {
+		const float other_max[] = {11.0f, 2.5f, 65.0f, 2.5f}; // PWR, CUR, TEMP, TRQ
+		max_val = other_max[active_metric - 1];
+	}
+	
 	int percentage = (int)((value / max_val) * 100.0f);
 	if (percentage < 0) percentage = 0;
 	if (percentage > 100) percentage = 100;
@@ -407,12 +423,63 @@ void rd::MotorTelemetry::update_card(int index, const motor_data_t &data, bool i
 	update_metric_display(index, data, is_small);
 }
 
+void rd::MotorTelemetry::update_metric_label() {
+	const char *metric_names[] = {"VELOCITY", "POWER", "CURRENT", "TEMPERATURE", "TORQUE"};
+	lv_color_t metric_colors[] = {COLOR_VEL, COLOR_PWR, COLOR_CUR, COLOR_TEMP_GREEN, COLOR_TRQ};
+	
+	lv_label_set_text(metric_label, metric_names[active_metric]);
+	lv_obj_set_style_text_color(metric_label, metric_colors[active_metric], 0);
+}
+
 void rd::MotorTelemetry::update(const std::vector<motor_data_t> &motors) {
 	bool is_small = (motor_count >= 5);
 	
 	int count = motors.size() > motor_count ? motor_count : motors.size();
 	for (int i = 0; i < count; i++) {
 		update_card(i, motors[i], is_small);
+	}
+}
+
+void rd::MotorTelemetry::update_from_groups(const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups) {
+	std::vector<motor_data_t> motors;
+	
+	for (const auto &[group, name] : groups) {
+		// Automatically extract ports from motor group
+		auto ports = group->get_port_all();
+		auto vels = group->get_actual_velocity_all();
+		auto powers = group->get_power_all();
+		auto currents = group->get_current_draw_all();
+		auto temps = group->get_temperature_all();
+		auto torques = group->get_torque_all();
+		auto gearsets = group->get_gearing_all();
+		
+		for (size_t i = 0; i < ports.size(); i++) {
+			// Convert PROS gearset enum to our format: red=0, green=1, blue=2
+			int gearset = 2; // default to blue
+			if (gearsets[i] == pros::MotorGears::red) gearset = 0;
+			else if (gearsets[i] == pros::MotorGears::green) gearset = 1;
+			else if (gearsets[i] == pros::MotorGears::blue) gearset = 2;
+			
+			motor_data_t motor_data;
+			motor_data.port = std::abs(ports[i]); // Use absolute value to show actual port number
+			motor_data.name = name;
+			motor_data.velocity_rpm = (float)vels[i];
+			motor_data.power_w = (float)(powers[i]/1000.0f);
+			motor_data.current_a = (float)(currents[i]/1000.0f);
+			motor_data.temp_c = (float)temps[i];
+			motor_data.torque_nm = (float)(torques[i]/100.0f);
+			motor_data.gearset = gearset;
+			
+			motors.push_back(motor_data);
+		}
+	}
+	
+	update(motors);
+}
+
+void rd::MotorTelemetry::auto_update() {
+	if (has_stored_groups) {
+		update_from_groups(stored_groups);
 	}
 }
 

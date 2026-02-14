@@ -1,5 +1,4 @@
 #include "liblvgl/misc/lv_color.h"
-#include "robodash/apix.h"
 
 // ================================= Colors ================================= //
 
@@ -19,7 +18,7 @@ lv_color_t color_bar_outline;
 
 void _init_colors() {
 	color_bg = lv_color_hsv_to_rgb(0, 0, 0);
-	color_border = lv_color_hsv_to_rgb(0, 0, 60);
+	color_border = lv_color_hsv_to_rgb(0, 0, 20);
 	color_shade = lv_color_hsv_to_rgb(0, 0, 20);
 	color_primary = lv_color_hsv_to_rgb(266, 66, 100);
 	color_primary_dark = lv_color_hsv_to_rgb(266, 66, 80);

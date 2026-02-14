@@ -6,8 +6,10 @@
 
 #pragma once
 #include "robodash/api.h"
+#include "pros/motor_group.hpp"
 #include <string>
 #include <vector>
+#include <tuple>
 
 namespace rd {
 
@@ -31,6 +33,7 @@ typedef struct motor_data {
 	float current_a;
 	float temp_c;
 	float torque_nm;
+	int gearset; // 0=red/100rpm, 1=green/200rpm, 2=blue/600rpm
 } motor_data_t;
 
 /**
@@ -46,11 +49,12 @@ class MotorTelemetry {
 
 	// UI Container elements
 	lv_obj_t *header_bar;
-	lv_obj_t *divider;
 	lv_obj_t *motor_grid;
 
-	// Metric tab buttons (5 total)
-	lv_obj_t *tabs[5];
+	// Metric selection UI
+	lv_obj_t *left_arrow;
+	lv_obj_t *right_arrow;
+	lv_obj_t *metric_label;
 
 	// Motor card containers (max 8)
 	struct motor_card {
@@ -65,6 +69,10 @@ class MotorTelemetry {
 	// Current state
 	int active_metric; // 0=VEL, 1=PWR, 2=CUR, 3=TEMP, 4=TRQ
 	int motor_count;
+	
+	// Stored motor groups for auto-update
+	bool has_stored_groups;
+	std::vector<std::tuple<pros::MotorGroup*, const char*>> stored_groups;
 
 	// Initialize UI
 	void init_header();
@@ -75,9 +83,11 @@ class MotorTelemetry {
 	void update_card(int index, const motor_data_t &data, bool is_small);
 	void update_led(lv_obj_t *led, float temp);
 	void update_metric_display(int index, const motor_data_t &data, bool is_small);
+	void update_metric_label();
 
-	// Tab callback helper
-	static void tab_click_cb(lv_event_t *event);
+	// Arrow callback helpers
+	static void left_arrow_cb(lv_event_t *event);
+	static void right_arrow_cb(lv_event_t *event);
 
   public:
 	/**
@@ -86,12 +96,30 @@ class MotorTelemetry {
 	 * @param motor_count Number of motors to display (1-8)
 	 */
 	MotorTelemetry(std::string name = "Motor Telemetry", int motor_count = 8);
+	
+	/**
+	 * @brief Create a Motor Telemetry screen with auto motor counting
+	 * @param name Name to display on screen
+	 * @param groups Vector of {motor_group, name} tuples - motor count auto-detected
+	 */
+	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups);
 
 	/**
 	 * @brief Update all motor data
 	 * @param motors Array/vector of motor data
 	 */
 	void update(const std::vector<motor_data_t> &motors);
+
+	/**
+	 * @brief Update motor data from motor groups
+	 * @param groups Vector of {motor_group, name} tuples (ports extracted automatically)
+	 */
+	void update_from_groups(const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups);
+	
+	/**
+	 * @brief Auto-update using stored motor groups (if constructor with groups was used)
+	 */
+	void auto_update();
 
 	/**
 	 * @brief Set this view to the active view
