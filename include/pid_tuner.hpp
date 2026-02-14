@@ -2,7 +2,7 @@
 
 #include "lemlib/chassis/chassis.hpp"
 #include "pros/misc.hpp"
-#include "pros/llemu.hpp"
+#include "robodash/api.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -19,6 +19,7 @@ class PIDTuner {
     private:
         lemlib::Chassis& chassis;
         pros::Controller& controller;
+        rd::Console* console;
         
         bool tuner_enabled;
         bool tuner_print_terminal;
@@ -34,10 +35,10 @@ class PIDTuner {
         double tuner_p_increment, tuner_i_increment, tuner_d_increment, tuner_windup_increment;
 
         void tuner_update_display() {
-            if (!tuner_enabled) return;
-            pros::lcd::clear();
+            if (!tuner_enabled || !console) return;
+            console->clear();
+            
             std::string title = (tuner_current_controller == 0 ? "Linear" : "Angular") + std::string(" Controller");
-            pros::lcd::set_text(0, title);
             
             PIDValues& v = tuner_current_controller == 0 ? tuner_linear_values : tuner_angular_values;
             std::string kpLine = "  kP: " + tuner_format_value(v.kP);
@@ -50,13 +51,17 @@ class PIDTuner {
             if (tuner_current_constant == 2) kdLine = "> " + kdLine.substr(2);
             if (tuner_current_constant == 3) windupLine = "> " + windupLine.substr(2);
             
-            pros::lcd::set_text(1, kpLine);
-            pros::lcd::set_text(2, kiLine);
-            pros::lcd::set_text(3, kdLine);
-            pros::lcd::set_text(4, windupLine);
-            pros::lcd::set_text(5, "");
-            pros::lcd::set_text(6, "L/R:Switch A:+ Y:-");
-            pros::lcd::set_text(7, "U/D:Select B:Test X:Exit");
+            console->update_line(0, title);
+            console->update_line(1, "================");
+            console->update_line(2, kpLine);
+            console->update_line(3, kiLine);
+            console->update_line(4, kdLine);
+            console->update_line(5, windupLine);
+            console->update_line(6, "");
+            console->update_line(7, "L/R: Switch Controller");
+            console->update_line(8, "U/D: Select Constant");
+            console->update_line(9, "A: Increase  Y: Decrease");
+            console->update_line(10, "B: Test");
             
             if (tuner_print_terminal) tuner_print_values();
         }
@@ -141,8 +146,8 @@ class PIDTuner {
         }
 
     public:
-        PIDTuner(lemlib::Chassis& chassis, pros::Controller& controller)
-            : chassis(chassis), controller(controller), tuner_enabled(false), tuner_print_terminal(false),
+        PIDTuner(lemlib::Chassis& chassis, pros::Controller& controller, rd::Console* console = nullptr)
+            : chassis(chassis), controller(controller), console(console), tuner_enabled(false), tuner_print_terminal(false),
               tuner_current_controller(0), tuner_current_constant(0), tuner_p_increment(0.1),
               tuner_i_increment(0.001), tuner_d_increment(0.5), tuner_windup_increment(0.1) {
             tuner_linear_values = {0, 0, 0, 0};
@@ -152,16 +157,13 @@ class PIDTuner {
         void pid_tuner_enable() {
             if (!tuner_enabled) {
                 tuner_enabled = true;
-                pros::lcd::initialize();
+                if (console) console->focus();
                 tuner_update_display();
             }
         }
 
         void pid_tuner_disable() {
-            if (tuner_enabled) {
-                tuner_enabled = false;
-                pros::lcd::shutdown();
-            }
+            tuner_enabled = false;
         }
 
         void pid_tuner_toggle() { tuner_enabled ? pid_tuner_disable() : pid_tuner_enable(); }

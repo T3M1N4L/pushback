@@ -8,6 +8,7 @@
 #include "robodash/api.h"
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace rd {
 
@@ -34,6 +35,7 @@ class Console {
 	lv_obj_t *output;
 	lv_obj_t *output_cont;
 	std::ostringstream stream;
+	std::vector<std::string> lines;
 
   public:
 	/**
@@ -75,6 +77,15 @@ class Console {
 		sprintf(fstr, fmt.c_str(), args...);
 		print(fstr);
 	}
+
+	/**
+	 * @brief Update a specific line (0-indexed)
+	 * If line doesn't exist, lines are added until reaching that index
+	 * 
+	 * @param line_num Line number to update
+	 * @param str New text for that line
+	 */
+	void update_line(int line_num, std::string str);
 
 	/**
 	 * @brief Set this view to the active view

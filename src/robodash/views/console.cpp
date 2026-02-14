@@ -28,6 +28,7 @@ void rd::Console::clear() {
 	lv_label_set_text(this->output, "");
 	this->stream.str("");
 	this->stream.clear();
+	this->lines.clear();
 }
 
 void rd::Console::print(std::string str) {
@@ -37,5 +38,25 @@ void rd::Console::print(std::string str) {
 }
 
 void rd::Console::println(std::string str) { this->print(str + "\n"); }
+
+void rd::Console::update_line(int line_num, std::string str) {
+	// Expand lines vector if needed
+	while (lines.size() <= (size_t)line_num) {
+		lines.push_back("");
+	}
+	
+	// Update the specific line
+	lines[line_num] = str;
+	
+	// Rebuild the full text
+	this->stream.str("");
+	this->stream.clear();
+	for (size_t i = 0; i < lines.size(); i++) {
+		this->stream << lines[i];
+		if (i < lines.size() - 1) this->stream << "\n";
+	}
+	
+	if (this->output) lv_label_set_text(this->output, this->stream.str().c_str());
+}
 
 void rd::Console::focus() { rd_view_focus(this->view); }
