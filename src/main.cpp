@@ -1,5 +1,4 @@
 #include "main.h"
-#include "pid_tuner.hpp"
 #include "robodash/api.h"
 #include <sys/_intsup.h>
 
@@ -17,11 +16,9 @@ pros::MotorGroup intake({3, -18}, pros::MotorGearset::blue);
  
 // Sensors
 pros::Imu imu(4);
-pros::Rotation verticalEnc(-6);
-pros::Rotation horizontalEnc(-15);
+pros::Rotation verticalEnc(-17);
 
 // Tracking wheels
-lemlib::TrackingWheel horizontal(&horizontalEnc, lemlib::Omniwheel::NEW_2, .5);
 lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_2, -4.5);
  
 // Drivetrain configuration
@@ -35,7 +32,7 @@ lemlib::ControllerSettings linearController(8.5, 0, 43, 3, 1, 100, 3, 500, 110);
 lemlib::ControllerSettings angularController(5.5, 0, 42.4, 3, 1, 100, 3, 500, 0);
  
 // Odometry sensors
-lemlib::OdomSensors sensors(&vertical, nullptr, &horizontal, nullptr, &imu);
+lemlib::OdomSensors sensors(&vertical, nullptr, nullptr, nullptr, &imu);
  
 // Drive curves for driver control
 lemlib::ExpoDriveCurve throttleCurve(3, 10, 1.019);
@@ -47,9 +44,6 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController,
 
 // Create robodash console
 rd::Console console;
-
-// Create PID tuner
-PIDTuner pidTuner(chassis, controller, &console);
 
 // ============================= Autonomous Routines ============================= //
 
@@ -128,6 +122,9 @@ rd::MotorTelemetry motorTelemetry("Motor Telemetry", {
     {&intake, "INT"}
 });
 
+// Create PID tuner screen
+rd::PIDTuner pidTuner("PID Tuner", &chassis, &controller);
+
 /**
  * Runs initialization code. This occurs as soon as the program is started.
  *
@@ -144,14 +141,11 @@ void initialize() {
     console.println("Calibration complete!");
  
     // Set initial PID values for the tuner to match your current configuration
-    pidTuner.pid_tuner_set_linear(8.5, 0, 43, 3);  // Match linearController settings
-    pidTuner.pid_tuner_set_angular(5.5, 0, 42.4, 3); // Match angularController settings
+    pidTuner.set_lateral_pid(8.5, 0, 43, 3);  // Match linearController settings
+    pidTuner.set_angular_pid(5.5, 0, 42.4, 3); // Match angularController settings
     
     // Configure increment values (optional)
-    pidTuner.pid_tuner_increment_p_set(0.1);
-    pidTuner.pid_tuner_increment_i_set(0.001);
-    pidTuner.pid_tuner_increment_d_set(0.5);
-    pidTuner.pid_tuner_increment_windup_set(0.1);
+    pidTuner.set_increments(0.1, 0.001, 0.5, 0.1);
     
     console.println("Robot initialized successfully!");
  
@@ -166,22 +160,7 @@ void initialize() {
     // thread to for position logging to console
     pros::Task screenTask([&]() {
         while (true) {
-            // Only update position if PID tuner is not active
-            if (!pidTuner.pid_tuner_enabled()) {
-                // Position logging temporarily disabled for debug output
-                /*
-                // Update robot location on separate lines (in-place editing)
-                char x_buffer[50], y_buffer[50], theta_buffer[50];
-                snprintf(x_buffer, sizeof(x_buffer), "X: %.2f", chassis.getPose().x);
-                snprintf(y_buffer, sizeof(y_buffer), "Y: %.2f", chassis.getPose().y);
-                snprintf(theta_buffer, sizeof(theta_buffer), "Theta: %.2f", chassis.getPose().theta);
-                
-                console.update_line(0, x_buffer);
-                console.update_line(1, y_buffer);
-                console.update_line(2, theta_buffer);
-                */
-            }
-            // delay to save resources
+            // Position logging - not needed with new PID tuner screen
             pros::delay(1000);
         }
     });
@@ -190,7 +169,15 @@ void initialize() {
     pros::Task telemetryTask([&]() {
         while (true) {
             motorTelemetry.auto_update();
-            pros::delay(50); // Update every 200ms to prevent LVGL conflicts
+            pros::delay(50); // Update every 50ms
+        }
+    });
+    
+    // Background task to update PID tuner telemetry
+    pros::Task pidTunerTask([&]() {
+        while (true) {
+            pidTuner.update();
+            pros::delay(100); // Update every 100ms
         }
     });
 }
@@ -217,6 +204,7 @@ void autonomous() {
     selector.run_auton();
     console.println("=== AUTONOMOUS COMPLETE ===");
 }
+
 /**     
  * Runs in driver control
  */
@@ -227,30 +215,12 @@ void opcontrol() {
     // controller
     // loop to continuously update motors
     while (true) {
-        // PID Tuner - Enable with X button (like EZ-Template)
-        // When enabled:
-        // - LEFT/RIGHT arrows: switch between Linear and Angular controllers
-        // - UP/DOWN arrows: select constant to tune (kP, kI, kD, windupRange)
-        // - A button: increase value
-        // - Y button: decrease value
-        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) {
-            pidTuner.pid_tuner_toggle();
-            pros::delay(100); // Debounce to prevent crashes
-        }
-
-        // Update the PID tuner
-        if (pidTuner.pid_tuner_enabled()) {
-            pidTuner.pid_tuner_iterate();
-        }
-
         // get joystick positions
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         // move the chassis with curvature drive
         chassis.curvature(leftY, rightX);
- 
-
- 
+  
         // delay to save resources
         pros::delay(10);
     }

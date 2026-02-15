@@ -447,3 +447,7 @@ void rd_view_alert(rd_view_t *view, const char *msg) {
 	lv_label_set_long_mode(alert_msg, LV_LABEL_LONG_WRAP);
 	lv_label_set_text(alert_msg, msg);
 }
+
+rd_view_t *rd_view_get_current() {
+	return current_view;
+}

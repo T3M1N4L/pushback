@@ -95,6 +95,13 @@ void rd_view_set_anims(rd_view_t *view, rd_anim_state_t state);
  */
 rd_anim_state_t rd_view_get_anims(rd_view_t *view);
 
+/**
+ * @brief Get the currently focused view
+ *
+ * @return Pointer to the currently focused view, or NULL if no view is focused
+ */
+rd_view_t *rd_view_get_current();
+
 /// @}
 
 #ifdef __cplusplus
