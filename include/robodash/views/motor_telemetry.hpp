@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <tuple>
+#include <map>
 
 namespace rd {
 
@@ -33,7 +34,8 @@ typedef struct motor_data {
 	float current_a;
 	float temp_c;
 	float torque_nm;
-	int gearset; // 0=red/100rpm, 1=green/200rpm, 2=blue/600rpm
+	int gearing; // 0=100rpm, 1=200rpm, 2=600rpm
+	bool connected;
 } motor_data_t;
 
 /**
@@ -73,6 +75,17 @@ class MotorTelemetry {
 	// Stored motor groups for auto-update
 	bool has_stored_groups;
 	std::vector<std::tuple<pros::MotorGroup*, const char*>> stored_groups;
+	
+	// Stored individual motors for auto-update
+	bool has_stored_motors;
+	std::vector<std::tuple<pros::Motor*, const char*>> stored_motors;
+	
+	// Connection state tracking for grace period
+	struct MotorConnectionState {
+		bool was_connected;
+		uint32_t reconnect_time_ms;
+	};
+	std::map<int8_t, MotorConnectionState> motor_states;
 
 	// Initialize UI
 	void init_header();
@@ -105,6 +118,13 @@ class MotorTelemetry {
 	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups);
 
 	/**
+	 * @brief Create a Motor Telemetry screen with individual motors
+	 * @param name Name to display on screen
+	 * @param motors Vector of {motor*, name} tuples - individual motors for better telemetry
+	 */
+	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::Motor*, const char*>> &motors);
+
+	/**
 	 * @brief Update all motor data
 	 * @param motors Array/vector of motor data
 	 */
@@ -115,6 +135,12 @@ class MotorTelemetry {
 	 * @param groups Vector of {motor_group, name} tuples (ports extracted automatically)
 	 */
 	void update_from_groups(const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups);
+	
+	/**
+	 * @brief Update motor data from individual motors
+	 * @param motors Vector of {motor*, name} tuples
+	 */
+	void update_from_motors(const std::vector<std::tuple<pros::Motor*, const char*>> &motors);
 	
 	/**
 	 * @brief Auto-update using stored motor groups (if constructor with groups was used)

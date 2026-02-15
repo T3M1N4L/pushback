@@ -1,5 +1,4 @@
 #include "main.h"
-#include "autons.hpp"
 #include "pid_tuner.hpp"
 #include "robodash/api.h"
 #include <sys/_intsup.h>
@@ -52,6 +51,67 @@ rd::Console console;
 // Create PID tuner
 PIDTuner pidTuner(chassis, controller, &console);
 
+// ============================= Autonomous Routines ============================= //
+
+/**
+ * @brief Competition autonomous routine
+ */
+void compAuton() {
+    console.println("=== COMPETITION AUTON STARTED ===");
+    
+    // Add your competition autonomous code here
+    // Example:
+    // chassis.setPose(0, 0, 0);
+    // chassis.moveToPose(0, 24, 0, 2000);
+    // chassis.moveToPose(24, 24, 90, 2000);
+    
+    console.println("Competition auton complete!");
+}
+
+/**
+ * @brief Skills autonomous routine
+ */
+void skillsAuton() {
+    console.println("=== SKILLS AUTON STARTED ===");
+    
+    // Add your skills autonomous code here
+    // Example:
+    // chassis.setPose(0, 0, 0);
+    // Full 1 minute skills run code...
+    
+    console.println("Skills auton complete!");
+}
+
+/**
+ * @brief Do nothing autonomous
+ */
+void doNothing() {
+    console.println("Do Nothing auton selected - robot inactive");
+}
+
+// ============================= Add More Autons Below ============================= //
+
+// Example additional autonomous routines:
+/*
+void leftSideAuton() {
+    console.println("=== LEFT SIDE AUTON ===");
+    chassis.setPose(-48, 0, 0);
+    // Your left side code...
+}
+
+void rightSideAuton() {
+    console.println("=== RIGHT SIDE AUTON ===");
+    chassis.setPose(48, 0, 0);
+    // Your right side code...
+}
+
+void safeAuton() {
+    console.println("=== SAFE AUTON ===");
+    // Simple, reliable autonomous
+    chassis.moveToPoint(0, 24, 2000);
+}
+*/
+
 // Create robodash selector with autonomous routines
 // Format: {"Name", function, "image_path", color_hue}
 // color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
@@ -61,11 +121,11 @@ rd::Selector selector({
     {"Do Nothing", doNothing, "", 120}            // Green
 });
 
-// Create motor telemetry screen (auto-detects motor count from groups)
+// Create motor telemetry screen
 rd::MotorTelemetry motorTelemetry("Motor Telemetry", {
-    {&leftMotors, "L-DRIVE"},
-    {&rightMotors, "R-DRIVE"},
-    {&intake, "INTAKE"}
+    {&leftMotors, "LFT"},
+    {&rightMotors, "RGT"},
+    {&intake, "INT"}
 });
 
 /**
@@ -94,15 +154,6 @@ void initialize() {
     pidTuner.pid_tuner_increment_windup_set(0.1);
     
     console.println("Robot initialized successfully!");
-    
-    // Selector callback - logs when an auton is selected
-    selector.on_select([](std::optional<rd::Selector::routine_t> routine) {
-        if (routine == std::nullopt) {
-            console.println("No autonomous selected");
-        } else {
-            console.printf("Selected: %s\n", routine.value().name.c_str());
-        }
-    });
  
     // the default rate is 50. however, if you need to change the rate, you
     // can do the following.
@@ -117,6 +168,8 @@ void initialize() {
         while (true) {
             // Only update position if PID tuner is not active
             if (!pidTuner.pid_tuner_enabled()) {
+                // Position logging temporarily disabled for debug output
+                /*
                 // Update robot location on separate lines (in-place editing)
                 char x_buffer[50], y_buffer[50], theta_buffer[50];
                 snprintf(x_buffer, sizeof(x_buffer), "X: %.2f", chassis.getPose().x);
@@ -126,6 +179,7 @@ void initialize() {
                 console.update_line(0, x_buffer);
                 console.update_line(1, y_buffer);
                 console.update_line(2, theta_buffer);
+                */
             }
             // delay to save resources
             pros::delay(1000);
@@ -136,7 +190,7 @@ void initialize() {
     pros::Task telemetryTask([&]() {
         while (true) {
             motorTelemetry.auto_update();
-            pros::delay(50);
+            pros::delay(50); // Update every 200ms to prevent LVGL conflicts
         }
     });
 }
@@ -167,7 +221,8 @@ void autonomous() {
  * Runs in driver control
  */
 void opcontrol() {
-    console.println("=== DRIVER CONTROL STARTED ===");
+    printf("\n=== DRIVER CONTROL STARTED ===\n");
+    fflush(stdout);
     
     // controller
     // loop to continuously update motors
@@ -180,10 +235,13 @@ void opcontrol() {
         // - Y button: decrease value
         if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)) {
             pidTuner.pid_tuner_toggle();
+            pros::delay(100); // Debounce to prevent crashes
         }
 
         // Update the PID tuner
-        pidTuner.pid_tuner_iterate();
+        if (pidTuner.pid_tuner_enabled()) {
+            pidTuner.pid_tuner_iterate();
+        }
 
         // get joystick positions
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
@@ -191,6 +249,7 @@ void opcontrol() {
         // move the chassis with curvature drive
         chassis.curvature(leftY, rightX);
  
+
  
         // delay to save resources
         pros::delay(10);
