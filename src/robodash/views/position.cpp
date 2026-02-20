@@ -63,23 +63,23 @@ rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>&
 }
 
 void rd::Position::init_field_display(lv_obj_t *parent) {
-	// Field image container (240x240)
-	lv_obj_t *image_cont = lv_obj_create(parent);
-	lv_obj_add_style(image_cont, &style_transp, 0);
-	lv_obj_set_size(image_cont, 240, 240);
-	lv_obj_set_layout(image_cont, LV_LAYOUT_FLEX);
-	lv_obj_set_flex_align(image_cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-	lv_obj_clear_flag(image_cont, LV_OBJ_FLAG_SCROLLABLE);
+	// Container for field image
+	lv_obj_t *field_container = lv_obj_create(parent);
+	lv_obj_add_style(field_container, &style_transp, 0);
+	lv_obj_set_size(field_container, 240, 240);
+	lv_obj_clear_flag(field_container, LV_OBJ_FLAG_SCROLLABLE);
 
-	field_image = lv_img_create(image_cont);
+	// Field image
+	field_image = lv_img_create(field_container);
 	lv_obj_align(field_image, LV_ALIGN_CENTER, 0, 0);
 	lv_obj_clear_flag(field_image, LV_OBJ_FLAG_SCROLLABLE);
-	lv_img_set_antialias(field_image, false);
 
-	// Load initial field image
+	// Load initial field image with forced refresh
 	if (!field_paths.empty() && pros::usd::is_installed()) {
 		std::string full_path = "S:/img/" + field_paths[0];
 		lv_img_set_src(field_image, full_path.c_str());
+		lv_obj_invalidate(field_image);
+		lv_refr_now(NULL);
 	}
 }
 
@@ -298,10 +298,26 @@ void rd::Position::update_field_display() {
 		// Update label
 		lv_label_set_text(field_label, field_names[current_field_index].c_str());
 		
-		// Load image directly
+		// Preload image into cache before displaying
 		if (pros::usd::is_installed()) {
 			std::string full_path = "S:/img/" + field_paths[current_field_index];
+			
+			// Create temporary hidden image to force cache load
+			lv_obj_t *temp_img = lv_img_create(lv_scr_act());
+			lv_img_set_src(temp_img, full_path.c_str());
+			lv_obj_add_flag(temp_img, LV_OBJ_FLAG_HIDDEN);
+			
+			// Force complete render cycle to decode image
+			lv_refr_now(NULL);
+			lv_refr_now(NULL);
+			
+			// Now set on actual image (should be instant from cache)
 			lv_img_set_src(field_image, full_path.c_str());
+			lv_obj_invalidate(field_image);
+			lv_refr_now(NULL);
+			
+			// Clean up temp image
+			lv_obj_del(temp_img);
 		}
 	}
 }
