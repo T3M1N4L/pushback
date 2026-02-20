@@ -28,8 +28,8 @@ static const uint32_t RECONNECT_GRACE_MS = 250;
 // UI element colors
 #define COLOR_TEXT_DIM lv_color_hex(0x444444)
 #define COLOR_TEXT_MED lv_color_hex(0x555555)
-#define COLOR_CARD_BG lv_color_hex(0x080808)
-#define COLOR_PROGRESS_TRACK lv_color_hex(0x111111)
+#define COLOR_CARD_BG lv_color_hex(0x000000)
+#define COLOR_PROGRESS_TRACK lv_color_hex(0x000000)
 
 // ============================= Metric Data ============================= //
 

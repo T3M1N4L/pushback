@@ -16,7 +16,7 @@
 #define COLOR_TEXT_DIM lv_color_hex(0x444444)
 #define COLOR_TEXT_MED lv_color_hex(0x888888)
 #define COLOR_TEXT_BRIGHT lv_color_hex(0xffffff)
-#define COLOR_CARD_BG lv_color_hex(0x080808)
+#define COLOR_CARD_BG lv_color_hex(0x000000)
 #define COLOR_LAT lv_color_hex(0x22c55e)       // Green for Lateral
 #define COLOR_ANG lv_color_hex(0x0ea5e9)       // Blue for Angular
 
@@ -226,6 +226,10 @@ void rd::PIDTuner::init_pid_editor() {
 		lv_label_set_text(minus_label, LV_SYMBOL_MINUS);
 		lv_obj_set_style_text_font(minus_label, &lv_font_montserrat_14, 0);
 		lv_obj_set_style_text_color(minus_label, COLOR_TEXT_BRIGHT, 0);
+		lv_obj_set_style_pad_left(pid_rows[i].minus_btn, 6, 0);
+		lv_obj_set_style_pad_right(pid_rows[i].minus_btn, 6, 0);
+		lv_obj_set_style_pad_top(pid_rows[i].minus_btn, 6, 0);
+		lv_obj_set_style_pad_bottom(pid_rows[i].minus_btn, 6, 0);
 		lv_obj_center(minus_label);
 
 		// Value display - white
@@ -254,6 +258,10 @@ void rd::PIDTuner::init_pid_editor() {
 		lv_label_set_text(plus_label, LV_SYMBOL_PLUS);
 		lv_obj_set_style_text_font(plus_label, &lv_font_montserrat_14, 0);
 		lv_obj_set_style_text_color(plus_label, COLOR_TEXT_BRIGHT, 0);
+		lv_obj_set_style_pad_left(pid_rows[i].plus_btn, 6, 0);
+		lv_obj_set_style_pad_right(pid_rows[i].plus_btn, 6, 0);
+		lv_obj_set_style_pad_top(pid_rows[i].plus_btn, 6, 0);
+		lv_obj_set_style_pad_bottom(pid_rows[i].plus_btn, 6, 0);
 		lv_obj_center(plus_label);
 	}
 }

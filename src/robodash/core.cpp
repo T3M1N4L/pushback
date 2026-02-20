@@ -1,7 +1,7 @@
 #include "robodash/apix.h"
 #include "pros/misc.hpp"
 
-const int view_menu_width = 192;
+const int view_menu_width = 240;
 
 // ============================== UI Elements ============================== //
 
@@ -224,17 +224,52 @@ void create_ui() {
 	lv_obj_align(close_img, LV_ALIGN_CENTER, 0, 0);
 
 	view_list = lv_list_create(view_menu);
-	lv_obj_set_size(view_list, lv_pct(100) - 8, lv_pct(100) - 32);
+	lv_obj_set_size(view_list, 200, lv_pct(100) - 32);
 	lv_obj_add_style(view_list, &style_core_list, 0);
 	lv_obj_align(view_list, LV_ALIGN_TOP_LEFT, 4, 36);
+	lv_obj_add_flag(view_list, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+	lv_obj_set_scroll_dir(view_list, LV_DIR_VER);
+
+	// View list scroll buttons
+	lv_obj_t *view_btns = lv_obj_create(view_menu);
+	lv_obj_add_style(view_btns, &style_transp, 0);
+	lv_obj_set_size(view_btns, 32, lv_pct(100) - 32);
+	lv_obj_align(view_btns, LV_ALIGN_TOP_RIGHT, -4, 36);
+	lv_obj_clear_flag(view_btns, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_layout(view_btns, LV_LAYOUT_FLEX);
+	lv_obj_set_flex_flow(view_btns, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_align(view_btns, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+	// Up scroll button
+	lv_obj_t *view_up_btn = lv_btn_create(view_btns);
+	lv_obj_add_style(view_up_btn, &style_transp, 0);
+	lv_obj_set_size(view_up_btn, 32, 32);
+	lv_obj_set_style_text_opa(view_up_btn, 128, LV_STATE_PRESSED);
+	lv_obj_set_flex_grow(view_up_btn, 1);
+	lv_obj_add_event_cb(view_up_btn, [](lv_event_t *e) {
+		lv_obj_scroll_by_bounded(view_list, 0, 40, LV_ANIM_ON);
+	}, LV_EVENT_CLICKED, nullptr);
+
+	lv_obj_t *view_up_img = lv_img_create(view_up_btn);
+	lv_obj_align(view_up_img, LV_ALIGN_CENTER, 0, 0);
+	lv_img_set_src(view_up_img, LV_SYMBOL_UP);
+
+	// Down scroll button
+	lv_obj_t *view_down_btn = lv_btn_create(view_btns);
+	lv_obj_add_style(view_down_btn, &style_transp, 0);
+	lv_obj_set_size(view_down_btn, 32, 32);
+	lv_obj_set_style_text_opa(view_down_btn, 128, LV_STATE_PRESSED);
+	lv_obj_set_flex_grow(view_down_btn, 1);
+	lv_obj_add_event_cb(view_down_btn, [](lv_event_t *e) {
+		lv_obj_scroll_by_bounded(view_list, 0, -40, LV_ANIM_ON);
+	}, LV_EVENT_CLICKED, nullptr);
+
+	lv_obj_t *view_down_img = lv_img_create(view_down_btn);
+	lv_obj_align(view_down_img, LV_ALIGN_CENTER, 0, 0);
+	lv_img_set_src(view_down_img, LV_SYMBOL_DOWN);
 
 	anim_label = lv_label_create(view_menu);
-	lv_label_set_text(anim_label, "Animations are disabled\nfor this view");
-	lv_obj_add_style(anim_label, &style_text_small, 0);
-	lv_obj_add_style(anim_label, &style_text_centered, 0);
-	lv_obj_align(anim_label, LV_ALIGN_BOTTOM_MID, 0, -2);
 	lv_obj_add_flag(anim_label, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_set_style_text_font(anim_label, &lv_font_montserrat_10, 0);
 
 	// Battery indicator (bottom right)
 	battery_icon = lv_img_create(view_menu);

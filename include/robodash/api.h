@@ -43,4 +43,5 @@
 #include "views/selector.hpp"
 #include "views/motor_telemetry.hpp"
 #include "views/pid_tuner.hpp"
+#include "views/position.hpp"
 #endif

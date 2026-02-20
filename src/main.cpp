@@ -10,9 +10,9 @@ pros::adi::Pneumatics wing('B', false);
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 // Motor groups
-pros::MotorGroup leftMotors({-1, -2, -7}, pros::MotorGearset::blue);
-pros::MotorGroup rightMotors({10, 9, 17}, pros::MotorGearset::blue);
-pros::MotorGroup intake({3, -18}, pros::MotorGearset::blue);
+pros::MotorGroup leftMotors({-10, 9,-3}, pros::MotorGearset::blue);
+pros::MotorGroup rightMotors({6, -8, 7}, pros::MotorGearset::blue);
+pros::MotorGroup intake({21, -18}, pros::MotorGearset::blue);
  
 // Sensors
 pros::Imu imu(4);
@@ -115,6 +115,12 @@ rd::Selector selector({
     {"Do Nothing", doNothing, "", 120}            // Green
 });
 
+// Create image widget
+rd::Image teamLogo("/img/gengy.bin", "Gengar");
+
+// Create position display view
+rd::Position position(&chassis, {"skills.bin", "match.bin"}, {"Skills", "Match"});
+
 // Create motor telemetry screen
 rd::MotorTelemetry motorTelemetry("Motor Telemetry", {
     {&leftMotors, "LFT"},
@@ -178,6 +184,14 @@ void initialize() {
         while (true) {
             pidTuner.update();
             pros::delay(100); // Update every 100ms
+        }
+    });
+    
+    // Background task to update position display
+    pros::Task positionTask([&]() {
+        while (true) {
+            position.update();
+            pros::delay(50); // Update every 50ms
         }
     });
 }
