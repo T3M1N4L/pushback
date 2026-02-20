@@ -441,10 +441,8 @@ void rd_view_focus(rd_view_t *view) {
 	current_view = view;
 	lv_obj_clear_flag(current_view->obj, LV_OBJ_FLAG_HIDDEN);
 
-	if (rd_view_get_anims(current_view) == RD_ANIM_ON)
-		lv_obj_add_flag(anim_label, LV_OBJ_FLAG_HIDDEN);
-	else
-		lv_obj_clear_flag(anim_label, LV_OBJ_FLAG_HIDDEN);
+	// Always keep anim_label hidden since we removed the text
+	lv_obj_add_flag(anim_label, LV_OBJ_FLAG_HIDDEN);
 }
 
 void rd_view_alert(rd_view_t *view, const char *msg) {

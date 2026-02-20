@@ -27,6 +27,7 @@ rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>&
 
 	this->view = rd_view_create("Position");
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
+	lv_obj_clear_flag(view->obj, LV_OBJ_FLAG_SCROLLABLE);
 
 	// Create main container with two panels
 	lv_obj_t *main_container = lv_obj_create(view->obj);
@@ -35,6 +36,7 @@ rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>&
 	lv_obj_align(main_container, LV_ALIGN_TOP_LEFT, 0, 0);
 	lv_obj_set_layout(main_container, LV_LAYOUT_FLEX);
 	lv_obj_set_flex_flow(main_container, LV_FLEX_FLOW_ROW);
+	lv_obj_clear_flag(main_container, LV_OBJ_FLAG_SCROLLABLE);
 
 	// Left panel - Field image (240x240)
 	lv_obj_t *left_panel = lv_obj_create(main_container);
@@ -43,6 +45,7 @@ rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>&
 	lv_obj_set_layout(left_panel, LV_LAYOUT_FLEX);
 	lv_obj_set_flex_flow(left_panel, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(left_panel, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+	lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_SCROLLABLE);
 
 	// Right panel - Position display
 	lv_obj_t *right_panel = lv_obj_create(main_container);
@@ -51,11 +54,12 @@ rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>&
 	lv_obj_set_layout(right_panel, LV_LAYOUT_FLEX);
 	lv_obj_set_flex_flow(right_panel, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(right_panel, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+	lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_SCROLLABLE);
 
 	init_field_display(left_panel);
 	init_position_display(right_panel);
 
-	rd_view_set_anims(this->view, RD_ANIM_OFF);
+	rd_view_set_anims(this->view, RD_ANIM_ON);
 }
 
 void rd::Position::init_field_display(lv_obj_t *parent) {
@@ -68,16 +72,9 @@ void rd::Position::init_field_display(lv_obj_t *parent) {
 	lv_obj_clear_flag(image_cont, LV_OBJ_FLAG_SCROLLABLE);
 
 	field_image = lv_img_create(image_cont);
-	lv_obj_set_size(field_image, 240, 240);
 	lv_obj_align(field_image, LV_ALIGN_CENTER, 0, 0);
-
-	// Loading label (overlay on image)
-	loading_label = lv_label_create(image_cont);
-	lv_label_set_text(loading_label, "Loading...");
-	lv_obj_set_style_text_color(loading_label, COLOR_ACCENT, 0);
-	lv_obj_set_style_text_font(loading_label, &lv_font_montserrat_16, 0);
-	lv_obj_align(loading_label, LV_ALIGN_CENTER, 0, 0);
-	lv_obj_add_flag(loading_label, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_clear_flag(field_image, LV_OBJ_FLAG_SCROLLABLE);
+	lv_img_set_antialias(field_image, false);
 
 	// Load initial field image
 	if (!field_paths.empty() && pros::usd::is_installed()) {
@@ -298,22 +295,14 @@ void rd::Position::next_field_cb(lv_event_t *event) {
 
 void rd::Position::update_field_display() {
 	if (current_field_index >= 0 && current_field_index < (int)field_paths.size()) {
-		// Show loading screen
-		lv_obj_clear_flag(loading_label, LV_OBJ_FLAG_HIDDEN);
-		lv_obj_add_flag(field_image, LV_OBJ_FLAG_HIDDEN);
-		
 		// Update label
 		lv_label_set_text(field_label, field_names[current_field_index].c_str());
 		
-		// Load image
+		// Load image directly
 		if (pros::usd::is_installed()) {
 			std::string full_path = "S:/img/" + field_paths[current_field_index];
 			lv_img_set_src(field_image, full_path.c_str());
 		}
-		
-		// Hide loading screen, show image
-		lv_obj_add_flag(loading_label, LV_OBJ_FLAG_HIDDEN);
-		lv_obj_clear_flag(field_image, LV_OBJ_FLAG_HIDDEN);
 	}
 }
 

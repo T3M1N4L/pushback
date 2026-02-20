@@ -41,7 +41,6 @@ class Position {
 	lv_obj_t *tachometer;
 	lv_obj_t *field_image;
 	lv_obj_t *field_label;
-	lv_obj_t *loading_label;
 
 	// Field tracking
 	std::vector<std::string> field_paths;
