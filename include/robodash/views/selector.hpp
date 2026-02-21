@@ -6,6 +6,7 @@
 
 #pragma once
 #include "robodash/api.h"
+#include "pros/misc.hpp"
 #include <functional>
 #include <optional>
 #include <string>
@@ -49,14 +50,16 @@ class Selector {
 	 * @brief Create autonomous selector
 	 * @param name Name of the autonomous selector
 	 * @param autons Vector of autonomous rotuines
+	 * @param controller Optional controller for navigation
 	 */
-	Selector(std::string name, std::vector<routine_t> autons);
+	Selector(std::string name, std::vector<routine_t> autons, pros::Controller* controller = nullptr);
 
 	/**
 	 * @brief Create autonomous selector
 	 * @param autons Vector of autonomous rotuines
+	 * @param controller Optional controller for navigation
 	 */
-	Selector(std::vector<routine_t> autons);
+	Selector(std::vector<routine_t> autons, pros::Controller* controller = nullptr);
 
 	/**
 	 * @brief Run selected auton
@@ -95,6 +98,11 @@ class Selector {
 	 * @brief Set this view to the active view
 	 */
 	void focus();
+	
+	/**
+	 * @brief Update controller display (call repeatedly in a loop)
+	 */
+	void update();
 
 	/// @}
 
@@ -110,6 +118,9 @@ class Selector {
 	std::vector<rd::Selector::routine_t> routines;
 	std::vector<rd::Selector::select_action_t> select_callbacks;
 	rd::Selector::routine_t *selected_routine;
+	
+	// Controller support
+	pros::Controller* controller;
 
 	void sd_save();
 	void sd_load();

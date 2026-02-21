@@ -68,12 +68,19 @@ class PIDTuner {
 	};
 	PIDValues lat_values;
 	PIDValues ang_values;
+	
+	// Toggle for using tuner PID (true) vs lemlib defaults (false)
+	bool use_tuner_pid;
 
 	// Increment values
 	float p_increment;
 	float i_increment;
 	float d_increment;
 	float windup_increment;
+	
+	// SD card save/load
+	void save_to_sd_card();
+	void load_from_sd_card();
 
 	// Initialize UI
 	void init_header();
@@ -139,6 +146,18 @@ class PIDTuner {
 	 * @param windup Windup increment
 	 */
 	void set_increments(float p, float i, float d, float windup);
+	
+	/**
+	 * @brief Enable or disable using tuner PID values
+	 * @param use_tuner If true, apply PID tuner values to chassis; if false, leave chassis with lemlib defaults
+	 */
+	void set_use_tuner_pid(bool use_tuner);
+	
+	/**
+	 * @brief Get whether tuner PID is enabled
+	 * @return true if using tuner PID, false if using hardcoded PID
+	 */
+	bool get_use_tuner_pid();
 
 	/**
 	 * @brief Focus this view

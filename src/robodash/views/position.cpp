@@ -1,5 +1,6 @@
 #include "robodash/views/position.hpp"
 #include "robodash/apix.h"
+#include "pros/misc.hpp"
 #include <cmath>
 #include <cstdio>
 
@@ -19,11 +20,12 @@
 
 // ============================= Constructor ============================= //
 
-rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>& field_images, const std::vector<std::string>& field_names) {
+rd::Position::Position(lemlib::Chassis* chassis, const std::vector<std::string>& field_images, const std::vector<std::string>& field_names, pros::Controller* controller) {
 	this->chassis = chassis;
 	this->field_paths = field_images;
 	this->field_names = field_names;
 	this->current_field_index = 0;
+	this->controller = controller;
 
 	this->view = rd_view_create("Position");
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
@@ -344,6 +346,54 @@ void rd::Position::update() {
 	
 	// Update tachometer
 	draw_tachometer(pose.theta);
+	
+	// Update controller display when position changes significantly
+	if (controller != nullptr) {
+		static float last_x = -999, last_y = -999, last_theta = -999;
+		static bool first_update = true;
+		static bool was_active = false;
+		
+		// Only update if this is the active view
+		bool is_active = (rd_view_get_current() == this->view);
+		if (!is_active) {
+			was_active = false;
+			return;
+		}
+		
+		// Clear screen when view just became active
+		if (!was_active) {
+			controller->clear();
+			pros::delay(50);
+			was_active = true;
+			first_update = true; // Force update after clearing
+		}
+		
+		// Update if first time or if position changed by more than 0.5 inches or 2 degrees
+		if (first_update || fabs(pose.x - last_x) > 0.5 || fabs(pose.y - last_y) > 0.5 || fabs(pose.theta - last_theta) > 2.0) {
+			first_update = false;
+			last_x = pose.x;
+			last_y = pose.y;
+			last_theta = pose.theta;
+			
+			// Line 0: X position
+			char line0[32];
+			snprintf(line0, sizeof(line0), "X: %.2f\"", pose.x);
+			controller->set_text(0, 0, line0);
+			pros::delay(50);
+			
+			// Line 1: Y position
+			char line1[32];
+			snprintf(line1, sizeof(line1), "Y: %.2f\"", pose.y);
+			controller->set_text(1, 0, line1);
+			pros::delay(50);
+			
+			// Line 2: Theta
+			char line2[32];
+			snprintf(line2, sizeof(line2), "Theta: %.2f deg", pose.theta);
+			controller->set_text(2, 0, line2);
+			pros::delay(50);
+		}
+	}
 }
 
 void rd::Position::focus() {

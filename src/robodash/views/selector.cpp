@@ -154,11 +154,12 @@ void rd::Selector::down_cb(lv_event_t *event) {
 
 // ============================== Constructor ============================== //
 
-rd::Selector::Selector(std::vector<routine_t> autons) : Selector("Auton Selector", autons) {}
+rd::Selector::Selector(std::vector<routine_t> autons, pros::Controller* controller) : Selector("Auton Selector", autons, controller) {}
 
-rd::Selector::Selector(std::string name, std::vector<routine_t> new_routines) {
+rd::Selector::Selector(std::string name, std::vector<routine_t> new_routines, pros::Controller* controller) {
 	this->name = name;
 	this->selected_routine = nullptr;
+	this->controller = controller;
 
 	// ----------------------------- Create UI ----------------------------- //
 
@@ -390,6 +391,78 @@ std::optional<rd::Selector::routine_t> rd::Selector::get_auton() {
 
 void rd::Selector::on_select(rd::Selector::select_action_t callback) {
 	select_callbacks.push_back(callback);
+}
+
+void rd::Selector::update() {
+	if (controller == nullptr) return;
+	if (rd_view_get_current() != this->view) return;
+	
+	// UP: Previous auton
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)) {
+		prev_auton();
+	}
+	
+	// DOWN: Next auton
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+		next_auton();
+	}
+	
+	// A: Select current auton (simulate clicking it)
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+		// Find the currently highlighted button and click it
+		for (int id = 0; id < lv_obj_get_child_cnt(routine_list); id++) {
+			lv_obj_t *list_child = lv_obj_get_child(routine_list, id);
+			if (list_child == nullptr) continue;
+			if (lv_obj_has_state(list_child, LV_STATE_CHECKED)) {
+				// This is the selected one, confirm it
+				controller->rumble(".");
+				break;
+			}
+		}
+	}
+	
+	// Update controller LCD when selection changes
+	static rd::Selector::routine_t* last_routine = nullptr;
+	static bool first_update = true;
+	static bool was_active = false;
+	
+	// Only update if this is the active view
+	bool is_active = (rd_view_get_current() == this->view);
+	if (!is_active) {
+		was_active = false;
+		return;
+	}
+	
+	// Clear screen when view just became active
+	if (!was_active) {
+		controller->clear();
+		pros::delay(50);
+		was_active = true;
+		first_update = true; // Force update after clearing
+	}
+	
+	if (first_update || selected_routine != last_routine) {
+		first_update = false;
+		last_routine = selected_routine;
+		
+		// Line 0: Title
+		controller->set_text(0, 0, "Auton Selector");
+		pros::delay(50);
+		
+		// Line 1: Current selection
+		if (selected_routine != nullptr) {
+			char line1[32];
+			snprintf(line1, sizeof(line1), ">%s", selected_routine->name.c_str());
+			controller->set_text(1, 0, line1);
+		} else {
+			controller->set_text(1, 0, ">No selection");
+		}
+		pros::delay(50);
+		
+		// Line 2: Empty
+		controller->set_text(2, 0, "");
+		pros::delay(50);
+	}
 }
 
 void rd::Selector::focus() { rd_view_focus(this->view); }

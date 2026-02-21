@@ -44,11 +44,18 @@ rd::PIDTuner::PIDTuner(std::string name, lemlib::Chassis* chassis, pros::Control
 	lat_values = {0, 0, 0, 0};
 	ang_values = {0, 0, 0, 0};
 	
+	// Default: do NOT use tuner PID (use lemlib defaults)
+	use_tuner_pid = false;
+	
 	// Default increments
 	p_increment = 0.1f;
 	i_increment = 0.001f;
 	d_increment = 0.5f;
 	windup_increment = 0.1f;
+	
+	// Try to load saved PID values from SD card
+	// If file doesn't exist, values remain at 0
+	load_from_sd_card();
 
 	// Set pure black background and account for 32px top bar
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
@@ -572,8 +579,11 @@ rd::PIDTuner::PIDValues& rd::PIDTuner::get_current_values() {
 void rd::PIDTuner::apply_pid_to_chassis() {
 	if (!chassis) return;
 	
-	// Destroy and reconstruct PID controllers with new values
-	// This follows the pattern from the old pid_tuner.hpp
+	// Only apply PID tuner values when use_tuner_pid is true
+	// When false, don't touch the chassis PID (leave lemlib defaults)
+	if (!use_tuner_pid) return;
+	
+	// Apply tuner PID values to chassis
 	chassis->lateralPID.~PID();
 	new (&chassis->lateralPID) lemlib::PID(lat_values.kP, lat_values.kI, 
 	                                        lat_values.kD, lat_values.windupRange);
@@ -583,6 +593,36 @@ void rd::PIDTuner::apply_pid_to_chassis() {
 	                                        ang_values.kD, ang_values.windupRange);
 }
 
+void rd::PIDTuner::save_to_sd_card() {
+	const char* filename = "/usd/pid_tuner.txt";
+	FILE* file = fopen(filename, "w");
+	if (!file) return;
+	
+	// Save lateral and angular PID values
+	fprintf(file, "%.3f %.6f %.3f %.3f\n", 
+	        lat_values.kP, lat_values.kI, lat_values.kD, lat_values.windupRange);
+	fprintf(file, "%.3f %.6f %.3f %.3f\n", 
+	        ang_values.kP, ang_values.kI, ang_values.kD, ang_values.windupRange);
+	
+	fclose(file);
+}
+
+void rd::PIDTuner::load_from_sd_card() {
+	const char* filename = "/usd/pid_tuner.txt";
+	FILE* file = fopen(filename, "r");
+	if (!file) return; // File doesn't exist, keep default zeros
+	
+	// Load lateral PID values
+	fscanf(file, "%f %f %f %f", 
+	       &lat_values.kP, &lat_values.kI, &lat_values.kD, &lat_values.windupRange);
+	
+	// Load angular PID values
+	fscanf(file, "%f %f %f %f", 
+	       &ang_values.kP, &ang_values.kI, &ang_values.kD, &ang_values.windupRange);
+	
+	fclose(file);
+}
+
 // ============================= Public Methods ============================= //
 
 void rd::PIDTuner::set_lateral_pid(float kP, float kI, float kD, float windupRange) {
@@ -590,8 +630,9 @@ void rd::PIDTuner::set_lateral_pid(float kP, float kI, float kD, float windupRan
 	lat_values.kI = kI;
 	lat_values.kD = kD;
 	lat_values.windupRange = windupRange;
+	
 	update_pid_displays();
-	apply_pid_to_chassis();
+	// Don't apply to chassis here - only apply when use_tuner_pid is enabled
 }
 
 void rd::PIDTuner::set_angular_pid(float kP, float kI, float kD, float windupRange) {
@@ -599,8 +640,9 @@ void rd::PIDTuner::set_angular_pid(float kP, float kI, float kD, float windupRan
 	ang_values.kI = kI;
 	ang_values.kD = kD;
 	ang_values.windupRange = windupRange;
+	
 	update_pid_displays();
-	apply_pid_to_chassis();
+	// Don't apply to chassis here - only apply when use_tuner_pid is enabled
 }
 
 void rd::PIDTuner::set_increments(float p, float i, float d, float windup) {
@@ -608,6 +650,15 @@ void rd::PIDTuner::set_increments(float p, float i, float d, float windup) {
 	i_increment = i;
 	d_increment = d;
 	windup_increment = windup;
+}
+
+void rd::PIDTuner::set_use_tuner_pid(bool use_tuner) {
+	use_tuner_pid = use_tuner;
+	apply_pid_to_chassis(); // Reapply PID with new setting
+}
+
+bool rd::PIDTuner::get_use_tuner_pid() {
+	return use_tuner_pid;
 }
 
 void rd::PIDTuner::update_row_highlight() {
@@ -679,6 +730,7 @@ void rd::PIDTuner::handle_controller_input() {
 		
 		update_pid_displays();
 		apply_pid_to_chassis();
+		save_to_sd_card();
 	}
 	
 	// Y: Decrement the selected constant
@@ -706,6 +758,68 @@ void rd::PIDTuner::handle_controller_input() {
 		
 		update_pid_displays();
 		apply_pid_to_chassis();
+		save_to_sd_card();
+	}
+	
+	// Update controller LCD when values change
+	static rd::PIDTuner::Mode last_mode = LAT;
+	static int last_row = 0;
+	static float last_kP = -1, last_kI = -1, last_kD = -1, last_windup = -1;
+	static bool first_update = true;
+	static bool was_active = false;
+	
+	// Only update if this is the active view
+	bool is_active = (rd_view_get_current() == this->view);
+	if (!is_active) {
+		was_active = false;
+		return;
+	}
+	
+	// Clear screen when view just became active
+	if (!was_active) {
+		controller->clear();
+		pros::delay(50);
+		was_active = true;
+		first_update = true; // Force update after clearing
+	}
+	
+	PIDValues& values = get_current_values();
+	bool changed = first_update || (current_mode != last_mode) || (selected_row != last_row) ||
+	               (values.kP != last_kP) || (values.kI != last_kI) ||
+	               (values.kD != last_kD) || (values.windupRange != last_windup);
+	
+	if (changed) {
+		first_update = false;
+		
+		const char* constant_names[] = {"kP", "kI", "kD", "Aw"};
+		
+		// Line 0: Mode
+		char line0[32];
+		snprintf(line0, sizeof(line0), "%s", current_mode == LAT ? "LAT PID" : "ANG PID");
+		controller->set_text(0, 0, line0);
+		pros::delay(50);
+		
+		// Line 1: Selected constant and value
+		char line1[32];
+		snprintf(line1, sizeof(line1), ">%s:%.3f", constant_names[selected_row], 
+		         selected_row == 0 ? values.kP : 
+		         selected_row == 1 ? values.kI : 
+		         selected_row == 2 ? values.kD : values.windupRange);
+		controller->set_text(1, 0, line1);
+		pros::delay(50);
+		
+		// Line 2: All values summary
+		char line2[32];
+		snprintf(line2, sizeof(line2), "P=%.1f|I=%.3f|D=%.1f", values.kP, values.kI, values.kD);
+		controller->set_text(2, 0, line2);
+		pros::delay(50);
+		
+		last_mode = current_mode;
+		last_row = selected_row;
+		last_kP = values.kP;
+		last_kI = values.kI;
+		last_kD = values.kD;
+		last_windup = values.windupRange;
 	}
 }
 

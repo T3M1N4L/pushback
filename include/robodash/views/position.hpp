@@ -7,6 +7,7 @@
 #pragma once
 #include "robodash/api.h"
 #include "lemlib/chassis/chassis.hpp"
+#include "pros/misc.hpp"
 #include <string>
 #include <vector>
 
@@ -46,6 +47,9 @@ class Position {
 	std::vector<std::string> field_paths;
 	std::vector<std::string> field_names;
 	int current_field_index;
+	
+	// Controller support
+	pros::Controller* controller;
 
 	// UI Setup functions
 	void init_position_display(lv_obj_t *parent);
@@ -65,8 +69,9 @@ class Position {
 	 * @param chassis Pointer to the lemlib chassis for position data
 	 * @param field_images Vector of field image paths (e.g., {"/fields/skills.bin", "/fields/match.bin"})
 	 * @param field_names Vector of field names for display
+	 * @param controller Optional controller for display
 	 */
-	Position(lemlib::Chassis* chassis, const std::vector<std::string>& field_images, const std::vector<std::string>& field_names);
+	Position(lemlib::Chassis* chassis, const std::vector<std::string>& field_images, const std::vector<std::string>& field_names, pros::Controller* controller = nullptr);
 
 	/**
 	 * @brief Update position display with current chassis data

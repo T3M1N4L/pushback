@@ -6,6 +6,7 @@
 
 #pragma once
 #include "robodash/api.h"
+#include "pros/misc.hpp"
 #include <sstream>
 #include <string>
 #include <vector>
@@ -36,14 +37,19 @@ class Console {
 	lv_obj_t *output_cont;
 	std::ostringstream stream;
 	std::vector<std::string> lines;
+	
+	// Controller support
+	pros::Controller* controller;
+	int scroll_position;  // Current scroll position for controller view
 
   public:
 	/**
 	 * @brief Create a new Console
 	 *
 	 * @param name Name to display on screen
+	 * @param controller Optional controller for navigation
 	 */
-	Console(std::string name = "Console");
+	Console(std::string name = "Console", pros::Controller* controller = nullptr);
 
 	/**
 	 * @brief Clear all console lines
@@ -91,6 +97,11 @@ class Console {
 	 * @brief Set this view to the active view
 	 */
 	void focus();
+	
+	/**
+	 * @brief Update controller display (call repeatedly in a loop)
+	 */
+	void update();
 
 	/// @}
 };

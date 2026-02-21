@@ -7,6 +7,7 @@
 #pragma once
 #include "robodash/api.h"
 #include "pros/motor_group.hpp"
+#include "pros/misc.hpp"
 #include <string>
 #include <vector>
 #include <tuple>
@@ -72,6 +73,9 @@ class MotorTelemetry {
 	int active_metric; // 0=VEL, 1=PWR, 2=CUR, 3=TEMP, 4=TRQ
 	int motor_count;
 	
+	// Controller support
+	pros::Controller* controller;
+	
 	// Stored motor groups for auto-update
 	bool has_stored_groups;
 	std::vector<std::tuple<pros::MotorGroup*, const char*>> stored_groups;
@@ -107,22 +111,25 @@ class MotorTelemetry {
 	 * @brief Create a Motor Telemetry screen
 	 * @param name Name to display on screen
 	 * @param motor_count Number of motors to display (1-8)
+	 * @param controller Optional controller for navigation
 	 */
-	MotorTelemetry(std::string name = "Motor Telemetry", int motor_count = 8);
+	MotorTelemetry(std::string name = "Motor Telemetry", int motor_count = 8, pros::Controller* controller = nullptr);
 	
 	/**
 	 * @brief Create a Motor Telemetry screen with auto motor counting
 	 * @param name Name to display on screen
 	 * @param groups Vector of {motor_group, name} tuples - motor count auto-detected
+	 * @param controller Optional controller for navigation
 	 */
-	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups);
+	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups, pros::Controller* controller = nullptr);
 
 	/**
 	 * @brief Create a Motor Telemetry screen with individual motors
 	 * @param name Name to display on screen
 	 * @param motors Vector of {motor*, name} tuples - individual motors for better telemetry
+	 * @param controller Optional controller for navigation
 	 */
-	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::Motor*, const char*>> &motors);
+	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::Motor*, const char*>> &motors, pros::Controller* controller = nullptr);
 
 	/**
 	 * @brief Update all motor data

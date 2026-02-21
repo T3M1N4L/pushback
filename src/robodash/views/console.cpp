@@ -1,9 +1,11 @@
 #include "robodash/views/console.hpp"
 #include "robodash/apix.h"
+#include "pros/misc.hpp"
 
 // ============================= Core Functions ============================= //
 
-rd::Console::Console(std::string name) {
+rd::Console::Console(std::string name, pros::Controller* controller) 
+	: controller(controller), scroll_position(0) {
 	this->view = rd_view_create(name.c_str());
 
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
@@ -57,6 +59,47 @@ void rd::Console::update_line(int line_num, std::string str) {
 	}
 	
 	if (this->output) lv_label_set_text(this->output, this->stream.str().c_str());
+}
+
+void rd::Console::update() {
+	if (controller == nullptr) return;
+	
+	// Display ASCII smiley face on controller LCD
+	static bool was_active = false;
+	bool is_active = (rd_view_get_current() == this->view);
+	
+	if (!is_active) {
+		was_active = false;
+		return;
+	}
+	
+	// Handle scrolling (only when view is active)
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP)) {
+		if (scroll_position > 0) scroll_position--;
+	}
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+		if (scroll_position < (int)lines.size() - 3) scroll_position++;
+	}
+	
+	// Clear and draw smiley when view becomes active
+	if (!was_active) {
+		controller->clear();
+		pros::delay(50);
+		
+		// Line 0: Eyes (18 char max)
+		controller->set_text(0, 0, "   X             X  ");
+		pros::delay(50);
+		
+		// Line 1: Smile curve
+		controller->set_text(1, 0, "");
+		pros::delay(50);
+		
+		// Line 2: Smile bottom
+		controller->set_text(2, 0, "      ######    ");
+		pros::delay(50);
+		
+		was_active = true;
+	}
 }
 
 void rd::Console::focus() { rd_view_focus(this->view); }

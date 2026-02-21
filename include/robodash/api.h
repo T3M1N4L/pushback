@@ -38,6 +38,10 @@
 #include "core.h"
 
 #ifdef __cplusplus
+// Include PROS headers before view headers to avoid forward declaration issues
+#include "pros/misc.hpp"
+#include "pros/motor_group.hpp"
+
 #include "views/console.hpp"
 #include "views/image.hpp"
 #include "views/selector.hpp"

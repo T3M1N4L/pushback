@@ -43,7 +43,7 @@ lemlib::Chassis chassis(drivetrain, linearController, angularController,
                        sensors, &throttleCurve, &steerCurve);
 
 // Create robodash console
-rd::Console console;
+rd::Console console("Console", &controller);
 
 // ============================= Autonomous Routines ============================= //
 
@@ -113,20 +113,20 @@ rd::Selector selector({
     {"Competition Auton", compAuton, "", 0},      // Red
     {"Skills Auton", skillsAuton, "", 220},       // Blue
     {"Do Nothing", doNothing, "", 120}            // Green
-});
+}, &controller);
 
 // Create image widget
 rd::Image teamLogo("/img/gengy.bin", "Gengar");
 
 // Create position display view
-rd::Position position(&chassis, {"skills.bin", "match.bin"}, {"Skills", "Match"});
+rd::Position position(&chassis, {"skills.bin", "match.bin"}, {"Skills", "Match"}, &controller);
 
 // Create motor telemetry screen
 rd::MotorTelemetry motorTelemetry("Motor Telemetry", {
     {&leftMotors, "LFT"},
     {&rightMotors, "RGT"},
     {&intake, "INT"}
-});
+}, &controller);
 
 // Create PID tuner screen
 rd::PIDTuner pidTuner("PID Tuner", &chassis, &controller);
@@ -138,6 +138,9 @@ rd::PIDTuner pidTuner("PID Tuner", &chassis, &controller);
  * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
+    // Clear controller LCD on startup
+    controller.clear();
+    pros::delay(50); // Wait for clear to complete
     
     console.println("Initializing robot...");
     console.println("Calibrating sensors...");
@@ -146,14 +149,17 @@ void initialize() {
     
     console.println("Calibration complete!");
  
-    // Set initial PID values for the tuner to match your current configuration
-    pidTuner.set_lateral_pid(8.5, 0, 43, 3);  // Match linearController settings
-    pidTuner.set_angular_pid(5.5, 0, 42.4, 3); // Match angularController settings
-    
-    // Configure increment values (optional)
+    // Configure PID tuner increment values (optional)
     pidTuner.set_increments(0.1, 0.001, 0.5, 0.1);
     
+    // ============================= PID Tuner Mode ============================= //
+    // Toggle between PID tuner values and lemlib defaults
+    // When TRUE: PID tuner applies its values to the chassis (saved to SD card)
+    // When FALSE: PID tuner does NOT touch chassis PID (uses lemlib defaults from above)
+    pidTuner.set_use_tuner_pid(true);  // Set to false to use lemlib defaults
+    
     console.println("Robot initialized successfully!");
+
  
     // the default rate is 50. however, if you need to change the rate, you
     // can do the following.
@@ -191,6 +197,22 @@ void initialize() {
     pros::Task positionTask([&]() {
         while (true) {
             position.update();
+            pros::delay(50); // Update every 50ms
+        }
+    });
+    
+    // Background task to update console (for controller scrolling)
+    pros::Task consoleTask([&]() {
+        while (true) {
+            console.update();
+            pros::delay(50); // Update every 50ms
+        }
+    });
+    
+    // Background task to update selector (for controller navigation)
+    pros::Task selectorTask([&]() {
+        while (true) {
+            selector.update();
             pros::delay(50); // Update every 50ms
         }
     });

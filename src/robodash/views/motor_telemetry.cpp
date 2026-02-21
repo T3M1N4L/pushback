@@ -89,12 +89,13 @@ void rd::MotorTelemetry::right_arrow_cb(lv_event_t *event) {
 
 // ============================= Constructor ============================= //
 
-rd::MotorTelemetry::MotorTelemetry(std::string name, int motor_count) {
+rd::MotorTelemetry::MotorTelemetry(std::string name, int motor_count, pros::Controller* controller) {
 	this->view = rd_view_create(name.c_str());
 	this->active_metric = 0; // Start with Velocity
 	this->motor_count = motor_count > 8 ? 8 : (motor_count < 1 ? 1 : motor_count);
 	this->has_stored_groups = false;
 	this->has_stored_motors = false;
+	this->controller = controller;
 
 	// Set pure black background and account for 32px top bar
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
@@ -107,12 +108,13 @@ rd::MotorTelemetry::MotorTelemetry(std::string name, int motor_count) {
 	update_metric_label();
 }
 
-rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups) {
+rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups, pros::Controller* controller) {
 	this->view = rd_view_create(name.c_str());
 	this->active_metric = 0; // Start with Velocity
 	this->has_stored_groups = true;
 	this->has_stored_motors = false;
 	this->stored_groups = groups;
+	this->controller = controller;
 	
 	// Count total motors from all groups
 	int total_motors = 0;
@@ -132,12 +134,13 @@ rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tupl
 	update_metric_label();
 }
 
-rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tuple<pros::Motor*, const char*>> &motors) {
+rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tuple<pros::Motor*, const char*>> &motors, pros::Controller* controller) {
 	this->view = rd_view_create(name.c_str());
 	this->active_metric = 0; // Start with Velocity
 	this->has_stored_groups = false;
 	this->has_stored_motors = true;
 	this->stored_motors = motors;
+	this->controller = controller;
 	
 	// Count motors
 	this->motor_count = motors.size() > 8 ? 8 : (motors.size() < 1 ? 1 : motors.size());
@@ -676,6 +679,67 @@ void rd::MotorTelemetry::auto_update() {
 		update_from_groups(stored_groups);
 	} else if (has_stored_motors) {
 		update_from_motors(stored_motors);
+	}
+	
+	// Handle controller input
+	if (controller != nullptr && rd_view_get_current() == this->view) {
+		// LEFT: Previous metric
+		if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
+			active_metric--;
+			if (active_metric < 0) active_metric = 4;
+			update_metric_label();
+		}
+		
+		// RIGHT: Next metric
+		if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_RIGHT)) {
+			active_metric++;
+			if (active_metric > 4) active_metric = 0;
+			update_metric_label();
+		}
+		
+		// Update controller LCD when metric changes
+		static int last_metric = -1;
+		static bool first_update = true;
+		static bool was_active = false;
+		
+		// Only update if this is the active view
+		bool is_active = (rd_view_get_current() == this->view);
+		if (!is_active) {
+			was_active = false;
+			return;
+		}
+		
+		// Clear screen when view just became active
+		if (!was_active) {
+			controller->clear();
+			pros::delay(50);
+			was_active = true;
+			first_update = true; // Force update after clearing
+		}
+		
+		if (first_update || active_metric != last_metric) {
+			first_update = false;
+			last_metric = active_metric;
+			
+			const char *metric_names[] = {"Velocity", "Power", "Current", "Temperature", "Torque"};
+			const char *metric_units[] = {"RPM", "W", "A", "C", "Nm"};
+			
+			// Line 0: Screen name and current metric
+			char line0[32];
+			snprintf(line0, sizeof(line0), "Motor: %s", metric_names[active_metric]);
+			controller->set_text(0, 0, line0);
+			pros::delay(50);
+			
+			// Line 1: Metric unit
+			char line1[32];
+			snprintf(line1, sizeof(line1), "Unit: %s", metric_units[active_metric]);
+			controller->set_text(1, 0, line1);
+			pros::delay(50);
+			
+			// Line 2: Empty
+			controller->set_text(2, 0, "");
+			pros::delay(50);
+		}
 	}
 }
 
