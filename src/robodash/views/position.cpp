@@ -70,18 +70,24 @@ void rd::Position::init_field_display(lv_obj_t *parent) {
 	lv_obj_add_style(field_container, &style_transp, 0);
 	lv_obj_set_size(field_container, 240, 240);
 	lv_obj_clear_flag(field_container, LV_OBJ_FLAG_SCROLLABLE);
+	// Optimize container to prevent unnecessary redraws
+	lv_obj_add_flag(field_container, LV_OBJ_FLAG_IGNORE_LAYOUT);
+	// Make container an isolated layer to prevent redraw propagation
+	lv_obj_set_style_bg_opa(field_container, LV_OPA_COVER, 0);
 
 	// Field image
 	field_image = lv_img_create(field_container);
 	lv_obj_align(field_image, LV_ALIGN_CENTER, 0, 0);
 	lv_obj_clear_flag(field_image, LV_OBJ_FLAG_SCROLLABLE);
+	// Prevent layout recalculation and unnecessary redraws
+	lv_obj_add_flag(field_image, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_FLOATING);
+	// Disable anti-aliasing for faster rendering
+	lv_obj_set_style_img_recolor_opa(field_image, 0, 0);
 
-	// Load initial field image with forced refresh
+	// Load initial field image asynchronously
 	if (!field_paths.empty() && pros::usd::is_installed()) {
 		std::string full_path = "S:/img/" + field_paths[0];
 		lv_img_set_src(field_image, full_path.c_str());
-		lv_obj_invalidate(field_image);
-		lv_refr_now(NULL);
 	}
 }
 
@@ -300,32 +306,26 @@ void rd::Position::update_field_display() {
 		// Update label
 		lv_label_set_text(field_label, field_names[current_field_index].c_str());
 		
-		// Preload image into cache before displaying
+		// Load image asynchronously - LVGL will decode in background
 		if (pros::usd::is_installed()) {
 			std::string full_path = "S:/img/" + field_paths[current_field_index];
 			
-			// Create temporary hidden image to force cache load
-			lv_obj_t *temp_img = lv_img_create(lv_scr_act());
-			lv_img_set_src(temp_img, full_path.c_str());
-			lv_obj_add_flag(temp_img, LV_OBJ_FLAG_HIDDEN);
-			
-			// Force complete render cycle to decode image
-			lv_refr_now(NULL);
-			lv_refr_now(NULL);
-			
-			// Now set on actual image (should be instant from cache)
-			lv_img_set_src(field_image, full_path.c_str());
-			lv_obj_invalidate(field_image);
-			lv_refr_now(NULL);
-			
-			// Clean up temp image
-			lv_obj_del(temp_img);
+			// Cache check: only reload if image changed
+			static std::string last_loaded_image = "";
+			if (full_path != last_loaded_image) {
+				// Only update image when it actually changes
+				lv_img_set_src(field_image, full_path.c_str());
+				last_loaded_image = full_path;
+			}
 		}
 	}
 }
 
 void rd::Position::update() {
 	if (!chassis) return;
+	
+	// Only update UI when this view is active to avoid LVGL threading issues
+	if (rd_view_get_current() != this->view) return;
 
 	lemlib::Pose pose = chassis->getPose();
 
@@ -344,8 +344,12 @@ void rd::Position::update() {
 	snprintf(theta_text, sizeof(theta_text), "%.2f", pose.theta);
 	lv_label_set_text(theta_label, theta_text);
 	
-	// Update tachometer
-	draw_tachometer(pose.theta);
+	// Update tachometer only when theta changes by more than 1 degree
+	static float last_tachometer_theta = -999.0f;
+	if (fabs(pose.theta - last_tachometer_theta) > 1.0f) {
+		draw_tachometer(pose.theta);
+		last_tachometer_theta = pose.theta;
+	}
 	
 	// Update controller display when position changes significantly
 	if (controller != nullptr) {

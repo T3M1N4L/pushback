@@ -51,17 +51,17 @@ class PIDTuner {
             if (tuner_current_constant == 2) kdLine = "> " + kdLine.substr(2);
             if (tuner_current_constant == 3) windupLine = "> " + windupLine.substr(2);
             
-            console->update_line(0, title);
-            console->update_line(1, "================");
-            console->update_line(2, kpLine);
-            console->update_line(3, kiLine);
-            console->update_line(4, kdLine);
-            console->update_line(5, windupLine);
-            console->update_line(6, "");
-            console->update_line(7, "L/R: Switch Controller");
-            console->update_line(8, "U/D: Select Constant");
-            console->update_line(9, "A: Increase  Y: Decrease");
-            console->update_line(10, "B: Test");
+            console->println(title);
+            console->println("================");
+            console->println(kpLine);
+            console->println(kiLine);
+            console->println(kdLine);
+            console->println(windupLine);
+            console->println("");
+            console->println("L/R: Switch Controller");
+            console->println("U/D: Select Constant");
+            console->println("A: Increase  Y: Decrease");
+            console->println("B: Test");
             
             if (tuner_print_terminal) tuner_print_values();
         }

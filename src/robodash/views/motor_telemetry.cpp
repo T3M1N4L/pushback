@@ -493,6 +493,9 @@ void rd::MotorTelemetry::update_metric_label() {
 }
 
 void rd::MotorTelemetry::update(const std::vector<motor_data_t> &motors) {
+	// Only update UI when this view is active to avoid LVGL threading issues
+	if (rd_view_get_current() != this->view) return;
+	
 	bool is_small = (motor_count >= 5);
 	
 	int count = motors.size() > motor_count ? motor_count : motors.size();

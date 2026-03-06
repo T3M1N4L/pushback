@@ -1,80 +1,11 @@
 #include "main.h"
+#include "globals.h"
+#include "auton/autonRoutines.h"
 #include "robodash/api.h"
 #include <sys/_intsup.h>
 
-// Pneumatic mechanisms
-pros::adi::Pneumatics toungeMech('E', false);
-pros::adi::Pneumatics wing('B', false);
-
-// Controller
-pros::Controller controller(pros::E_CONTROLLER_MASTER);
-
-// Motor groups
-pros::MotorGroup leftMotors({-10, 9,-3}, pros::MotorGearset::blue);
-pros::MotorGroup rightMotors({6, -8, 7}, pros::MotorGearset::blue);
-pros::MotorGroup intake({21, -18}, pros::MotorGearset::blue);
- 
-// Sensors
-pros::Imu imu(4);
-pros::Rotation verticalEnc(-17);
-
-// Tracking wheels
-lemlib::TrackingWheel vertical(&verticalEnc, lemlib::Omniwheel::NEW_2, -4.5);
- 
-// Drivetrain configuration
-lemlib::Drivetrain drivetrain(&leftMotors, &rightMotors, 10.95, 
-                              lemlib::Omniwheel::NEW_4, 450, 8);
- 
-// Lateral motion controller
-lemlib::ControllerSettings linearController(8.5, 0, 43, 3, 1, 100, 3, 500, 110);
- 
-// Angular motion controller
-lemlib::ControllerSettings angularController(5.5, 0, 42.4, 3, 1, 100, 3, 500, 0);
- 
-// Odometry sensors
-lemlib::OdomSensors sensors(&vertical, nullptr, nullptr, nullptr, &imu);
- 
-// Drive curves for driver control
-lemlib::ExpoDriveCurve throttleCurve(3, 10, 1.019);
-lemlib::ExpoDriveCurve steerCurve(3, 10, 1.019);
- 
-// Create chassis
-lemlib::Chassis chassis(drivetrain, linearController, angularController, 
-                       sensors, &throttleCurve, &steerCurve);
-
 // Create robodash console
 rd::Console console("Console", &controller);
-
-// ============================= Autonomous Routines ============================= //
-
-/**
- * @brief Competition autonomous routine
- */
-void compAuton() {
-    console.println("=== COMPETITION AUTON STARTED ===");
-    
-    // Add your competition autonomous code here
-    // Example:
-    // chassis.setPose(0, 0, 0);
-    // chassis.moveToPose(0, 24, 0, 2000);
-    // chassis.moveToPose(24, 24, 90, 2000);
-    
-    console.println("Competition auton complete!");
-}
-
-/**
- * @brief Skills autonomous routine
- */
-void skillsAuton() {
-    console.println("=== SKILLS AUTON STARTED ===");
-    
-    // Add your skills autonomous code here
-    // Example:
-    // chassis.setPose(0, 0, 0);
-    // Full 1 minute skills run code...
-    
-    console.println("Skills auton complete!");
-}
 
 /**
  * @brief Do nothing autonomous
@@ -83,36 +14,17 @@ void doNothing() {
     console.println("Do Nothing auton selected - robot inactive");
 }
 
-// ============================= Add More Autons Below ============================= //
-
-// Example additional autonomous routines:
-/*
-void leftSideAuton() {
-    console.println("=== LEFT SIDE AUTON ===");
-    chassis.setPose(-48, 0, 0);
-    // Your left side code...
-}
-
-void rightSideAuton() {
-    console.println("=== RIGHT SIDE AUTON ===");
-    chassis.setPose(48, 0, 0);
-    // Your right side code...
-}
-
-void safeAuton() {
-    console.println("=== SAFE AUTON ===");
-    // Simple, reliable autonomous
-    chassis.moveToPoint(0, 24, 2000);
-}
-*/
-
-// Create robodash selector with autonomous routines
+// Create robodash selector with autonomous routines from autonRoutines.h
 // Format: {"Name", function, "image_path", color_hue}
 // color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
 rd::Selector selector({
-    {"Competition Auton", compAuton, "", 0},      // Red
-    {"Skills Auton", skillsAuton, "", 220},       // Blue
-    {"Do Nothing", doNothing, "", 120}            // Green
+    {"Right Auton", right_auton, "", 0},          // Red
+    {"Left Auton", left_auton, "", 0},            // Red
+    {"Carry Auton", carry_auton, "", 60},         // Yellow
+    {"Elim Auton", elim_auton, "", 300},          // Magenta
+    {"AWP Auton", awp_auton, "", 220},            // Blue
+    {"Skills Auton", skills_auton, "", 120},      // Green
+    {"Do Nothing", doNothing, "", 180}            // Cyan
 }, &controller);
 
 // Create image widget
@@ -122,11 +34,8 @@ rd::Image teamLogo("/img/gengy.bin", "Gengar");
 rd::Position position(&chassis, {"skills.bin", "match.bin"}, {"Skills", "Match"}, &controller);
 
 // Create motor telemetry screen
-rd::MotorTelemetry motorTelemetry("Motor Telemetry", {
-    {&leftMotors, "LFT"},
-    {&rightMotors, "RGT"},
-    {&intake, "INT"}
-}, &controller);
+// Motor groups show all motors, individual motors show separately
+rd::MotorTelemetry motorTelemetry("Motor Telemetry", leftMotors.size() + rightMotors.size() + 2, &controller);
 
 // Create PID tuner screen
 rd::PIDTuner pidTuner("PID Tuner", &chassis, &controller);
@@ -177,10 +86,80 @@ void initialize() {
         }
     });
     
-    // Background task to update motor telemetry
+    // Background task to update motor telemetry (shows all motors from groups + individual motors)
     pros::Task telemetryTask([&]() {
         while (true) {
-            motorTelemetry.auto_update();
+            std::vector<rd::motor_data_t> all_motors;
+            uint32_t current_time = pros::millis();
+            
+            // Helper lambda to build motor data from C API
+            auto build_motor_data = [&current_time](int8_t port, const char* name) -> rd::motor_data_t {
+                rd::motor_data_t data;
+                int8_t abs_port = std::abs(port);
+                data.port = abs_port;
+                data.name = name;
+                
+                // Get raw values using C API directly
+                double raw_vel = pros::c::motor_get_actual_velocity(abs_port);
+                double raw_temp = pros::c::motor_get_temperature(abs_port);
+                int32_t raw_current_ma = pros::c::motor_get_current_draw(abs_port);
+                
+                // Connection detection
+                bool vel_valid = (raw_vel != PROS_ERR_F && !std::isnan(raw_vel) && !std::isinf(raw_vel));
+                bool temp_valid = (raw_temp != PROS_ERR_F && !std::isnan(raw_temp) && raw_temp > 0.0);
+                bool current_valid = (raw_current_ma != PROS_ERR);
+                int valid_count = (vel_valid ? 1 : 0) + (temp_valid ? 1 : 0) + (current_valid ? 1 : 0);
+                bool is_connected = (valid_count >= 2);
+                
+                data.connected = is_connected;
+                
+                if (is_connected) {
+                    // Get gearset
+                    pros::motor_gearset_e_t gearset = pros::c::motor_get_gearing(abs_port);
+                    int gear_idx = (int)gearset;
+                    if (gear_idx < 0 || gear_idx > 2) gear_idx = 2;
+                    data.gearing = gear_idx;
+                    
+                    // Velocity: reverse if port was negative
+                    float velocity = (float)raw_vel;
+                    if (port < 0) velocity = -velocity;
+                    
+                    data.velocity_rpm = velocity;
+                    data.power_w = (float)pros::c::motor_get_power(abs_port);
+                    data.current_a = (float)(raw_current_ma / 1000.0);
+                    data.temp_c = (float)raw_temp;
+                    data.torque_nm = (float)pros::c::motor_get_torque(abs_port);
+                } else {
+                    // Disconnected
+                    data.gearing = 2;
+                    data.velocity_rpm = 0;
+                    data.power_w = 0;
+                    data.current_a = 0;
+                    data.temp_c = 0;
+                    data.torque_nm = 0;
+                }
+                
+                return data;
+            };
+            
+            // Add ALL motors from leftMotors group
+            auto left_ports = leftMotors.get_port_all();
+            for (auto port : left_ports) {
+                all_motors.push_back(build_motor_data(port, "LFT"));
+            }
+            
+            // Add ALL motors from rightMotors group
+            auto right_ports = rightMotors.get_port_all();
+            for (auto port : right_ports) {
+                all_motors.push_back(build_motor_data(port, "RGT"));
+            }
+            
+            // Add individual motors
+            // Add individual motors (use their actual ports, respecting reversal)
+            all_motors.push_back(build_motor_data(intakeMotor.get_port(), "INT"));
+            all_motors.push_back(build_motor_data(topMotor.get_port(), "TOP"));
+            
+            motorTelemetry.update(all_motors);
             pros::delay(50); // Update every 50ms
         }
     });

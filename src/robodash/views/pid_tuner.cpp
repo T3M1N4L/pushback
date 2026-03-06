@@ -485,6 +485,9 @@ void rd::PIDTuner::update_pid_displays() {
 void rd::PIDTuner::update_telemetry() {
 	if (!chassis) return;
 	
+	// Only update UI when this view is active to avoid LVGL threading issues
+	if (rd_view_get_current() != this->view) return;
+	
 	lemlib::Pose pose = chassis->getPose();
 	
 	// Update position (3 decimals) - X red, Y green
@@ -504,8 +507,12 @@ void rd::PIDTuner::update_telemetry() {
 	snprintf(buf, sizeof(buf), "%.2f", pose.theta);
 	lv_label_set_text(theta_label, buf);
 	
-	// Update tachometer
-	draw_tachometer(pose.theta);
+	// Update tachometer only when theta changes by more than 1 degree
+	static float last_tachometer_theta = -999.0f;
+	if (fabs(pose.theta - last_tachometer_theta) > 1.0f) {
+		draw_tachometer(pose.theta);
+		last_tachometer_theta = pose.theta;
+	}
 }
 
 void rd::PIDTuner::update() {

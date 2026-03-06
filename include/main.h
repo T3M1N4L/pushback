@@ -4,7 +4,7 @@
  * Contains common definitions and header files used throughout your PROS
  * project.
  *
- * \copyright Copyright (c) 2017-2024, Purdue University ACM SIGBots.
+ * \copyright Copyright (c) 2017-2023, Purdue University ACM SIGBots.
  * All rights reserved.
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -35,13 +35,8 @@
 #define PROS_USE_LITERALS
 
 #include "api.h"
-
-/**
- * You should add more #includes here
- */
-#include "lemlib/api.hpp"
 #include "robodash/api.h"
-//#include "okapi/api.hpp"
+
 
 /**
  * If you find doing pros::Motor() to be tedious and you'd prefer just to do
@@ -76,7 +71,7 @@ void opcontrol(void);
 /**
  * You can add C++-only headers here
  */
-//#include <iostream>
+#include <iostream>
 #endif
 
 #endif  // _PROS_MAIN_H_

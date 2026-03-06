@@ -1,4 +1,4 @@
-/*
+	/*
     Based on the LVGL stdio fs template, with information from
     https://www.vexforum.com/t/lvgl-image-not-displaying/63612/14
 
