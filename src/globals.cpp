@@ -44,7 +44,7 @@ pros::adi::Pneumatics basket('D', false); // basket on port D, retracted initial
 pros::adi::Pneumatics descore('F', false); // descore on port F, retracted initially
 
 // ------------------------ Intake --------------------------
-pros::Motor intakeMotor(18, pros::v5::MotorGears::blue); // intake motor on port 18
+pros::Motor intakeMotor(-18, pros::v5::MotorGears::blue); // intake motor on port 18
 pros::Motor topMotor(7, pros::v5::MotorGears::blue);     // top roller motor on port 7
 
 // ------------------------ Sensors and Odometry ------------------------

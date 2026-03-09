@@ -1,6 +1,7 @@
 #include "main.h"
 #include "globals.h"
 #include "auton/autonRoutines.h"
+#include "auton/autonFunctions.h"
 #include "robodash/api.h"
 #include <sys/_intsup.h>
 
@@ -33,9 +34,17 @@ rd::Image teamLogo("/img/gengy.bin", "Gengar");
 // Create position display view
 rd::Position position(&chassis, {"skills.bin", "match.bin"}, {"Skills", "Match"}, &controller);
 
-// Create motor telemetry screen
-// Motor groups show all motors, individual motors show separately
-rd::MotorTelemetry motorTelemetry("Motor Telemetry", leftMotors.size() + rightMotors.size() + 2, &controller);
+// Create motor telemetry screen with motor groups and individual motors
+// Automatically displays all motors from groups plus individual motors
+std::vector<std::tuple<pros::MotorGroup*, const char*>> motor_groups = {
+	{&leftMotors, "LFT"},
+	{&rightMotors, "RGT"}
+};
+std::vector<std::tuple<pros::Motor*, const char*>> individual_motors = {
+	{&intakeMotor, "INT"},
+	{&topMotor, "TOP"}
+};
+rd::MotorTelemetry motorTelemetry("Motor Telemetry", motor_groups, individual_motors, &controller);
 
 // Create PID tuner screen
 rd::PIDTuner pidTuner("PID Tuner", &chassis, &controller);
@@ -65,7 +74,7 @@ void initialize() {
     // Toggle between PID tuner values and lemlib defaults
     // When TRUE: PID tuner applies its values to the chassis (saved to SD card)
     // When FALSE: PID tuner does NOT touch chassis PID (uses lemlib defaults from above)
-    pidTuner.set_use_tuner_pid(true);  // Set to false to use lemlib defaults
+    pidTuner.set_use_tuner_pid(false);  // Set to false to use lemlib defaults
     
     console.println("Robot initialized successfully!");
 
@@ -86,80 +95,10 @@ void initialize() {
         }
     });
     
-    // Background task to update motor telemetry (shows all motors from groups + individual motors)
-    pros::Task telemetryTask([&]() {
-        while (true) {
-            std::vector<rd::motor_data_t> all_motors;
-            uint32_t current_time = pros::millis();
-            
-            // Helper lambda to build motor data from C API
-            auto build_motor_data = [&current_time](int8_t port, const char* name) -> rd::motor_data_t {
-                rd::motor_data_t data;
-                int8_t abs_port = std::abs(port);
-                data.port = abs_port;
-                data.name = name;
-                
-                // Get raw values using C API directly
-                double raw_vel = pros::c::motor_get_actual_velocity(abs_port);
-                double raw_temp = pros::c::motor_get_temperature(abs_port);
-                int32_t raw_current_ma = pros::c::motor_get_current_draw(abs_port);
-                
-                // Connection detection
-                bool vel_valid = (raw_vel != PROS_ERR_F && !std::isnan(raw_vel) && !std::isinf(raw_vel));
-                bool temp_valid = (raw_temp != PROS_ERR_F && !std::isnan(raw_temp) && raw_temp > 0.0);
-                bool current_valid = (raw_current_ma != PROS_ERR);
-                int valid_count = (vel_valid ? 1 : 0) + (temp_valid ? 1 : 0) + (current_valid ? 1 : 0);
-                bool is_connected = (valid_count >= 2);
-                
-                data.connected = is_connected;
-                
-                if (is_connected) {
-                    // Get gearset
-                    pros::motor_gearset_e_t gearset = pros::c::motor_get_gearing(abs_port);
-                    int gear_idx = (int)gearset;
-                    if (gear_idx < 0 || gear_idx > 2) gear_idx = 2;
-                    data.gearing = gear_idx;
-                    
-                    // Velocity: reverse if port was negative
-                    float velocity = (float)raw_vel;
-                    if (port < 0) velocity = -velocity;
-                    
-                    data.velocity_rpm = velocity;
-                    data.power_w = (float)pros::c::motor_get_power(abs_port);
-                    data.current_a = (float)(raw_current_ma / 1000.0);
-                    data.temp_c = (float)raw_temp;
-                    data.torque_nm = (float)pros::c::motor_get_torque(abs_port);
-                } else {
-                    // Disconnected
-                    data.gearing = 2;
-                    data.velocity_rpm = 0;
-                    data.power_w = 0;
-                    data.current_a = 0;
-                    data.temp_c = 0;
-                    data.torque_nm = 0;
-                }
-                
-                return data;
-            };
-            
-            // Add ALL motors from leftMotors group
-            auto left_ports = leftMotors.get_port_all();
-            for (auto port : left_ports) {
-                all_motors.push_back(build_motor_data(port, "LFT"));
-            }
-            
-            // Add ALL motors from rightMotors group
-            auto right_ports = rightMotors.get_port_all();
-            for (auto port : right_ports) {
-                all_motors.push_back(build_motor_data(port, "RGT"));
-            }
-            
-            // Add individual motors
-            // Add individual motors (use their actual ports, respecting reversal)
-            all_motors.push_back(build_motor_data(intakeMotor.get_port(), "INT"));
-            all_motors.push_back(build_motor_data(topMotor.get_port(), "TOP"));
-            
-            motorTelemetry.update(all_motors);
+// Background task to update motor telemetry
+	pros::Task telemetryTask([&]() {
+		while (true) {
+			motorTelemetry.auto_update();
             pros::delay(50); // Update every 50ms
         }
     });
@@ -235,6 +174,23 @@ void opcontrol() {
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
         // move the chassis with curvature drive
         chassis.curvature(leftY, rightX);
+        
+        // Button mappings for intake/scoring functions
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+            storage();  // R1 → storage
+        }
+        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+            score_longgoal();  // R2 → score long goal
+        }
+        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
+            score_midgoal();  // L1 → score middle goal
+        }
+        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+            score_bottomgoal();  // L2 → score bottom goal
+        }
+        else {
+            intake_stop();  // Stop intake when no buttons pressed
+        }
   
         // delay to save resources
         pros::delay(10);

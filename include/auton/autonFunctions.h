@@ -8,17 +8,19 @@
 
 
 
-void intake(int power = 12000);
+void storage(int voltage = 127);
 
-void outtake(int power = 12000);
+void intake(int voltage = 127);
 
-void score_bottomgoal(int power = 12000);
+void outtake(int voltage = 127);
 
-void score_longgoal(int power = 12000, Color allianceColor = Color::RED);
+void score_bottomgoal(int voltage = 127);
 
-void score_midgoal(int power = 12000);
+void score_longgoal(int voltage = 127);
 
-void score_longgoal_auton(int power = 12000, Color allianceColor = Color::RED);
+void score_midgoal(int voltage = 127);
+
+void score_longgoal_auton(int voltage = 127, Color allianceColor = Color::RED);
 
 void intake_to_basket();
 

@@ -6,97 +6,108 @@
 
 // ============================= Constants ============================= //
 
-#define PI 3.14159265358979323846
+#define PI 3.14159265358979323846  // For angle calculations (if needed)
 
-// ============================= Color Definitions ============================= //
+// ============================= Color Palette ============================= //
+// Custom purple theme matching other robodash views
 
-// Matching Motor Telemetry theme
-#define COLOR_ACCENT lv_color_hex(0x9333ea)    // Purple accent
-#define COLOR_ACCENT_DIM lv_color_hex(0x7c3aed)
-#define COLOR_TEXT_DIM lv_color_hex(0x444444)
-#define COLOR_TEXT_MED lv_color_hex(0x888888)
-#define COLOR_TEXT_BRIGHT lv_color_hex(0xffffff)
-#define COLOR_CARD_BG lv_color_hex(0x000000)
-#define COLOR_LAT lv_color_hex(0x22c55e)       // Green for Lateral
-#define COLOR_ANG lv_color_hex(0x0ea5e9)       // Blue for Angular
+#define COLOR_ACCENT lv_color_hex(0x9333ea)    // Purple accent (primary UI color)
+#define COLOR_ACCENT_DIM lv_color_hex(0x7c3aed)  // Dimmer purple for pressed states
+#define COLOR_TEXT_DIM lv_color_hex(0x444444)    // Dim gray for secondary text
+#define COLOR_TEXT_MED lv_color_hex(0x888888)    // Medium gray for labels
+#define COLOR_TEXT_BRIGHT lv_color_hex(0xffffff)  // White for primary text
+#define COLOR_CARD_BG lv_color_hex(0x000000)      // Black card backgrounds
 
-// PID constant colors
-#define COLOR_KP lv_color_hex(0xa78bfa)        // Purple for kP
-#define COLOR_KI lv_color_hex(0x0ea5e9)        // Blue for kI
-#define COLOR_KD lv_color_hex(0x22c55e)        // Green for kD
-#define COLOR_WINDUP lv_color_hex(0xef4444)    // Red for Windup
+// Mode-specific colors (Lateral vs Angular PID)
+#define COLOR_LAT lv_color_hex(0x22c55e)       // Green for Lateral (forward/backward movement)
+#define COLOR_ANG lv_color_hex(0x0ea5e9)       // Blue for Angular (turning movement)
 
-// Telemetry colors
-#define COLOR_X lv_color_hex(0xef4444)         // Red for X
-#define COLOR_Y lv_color_hex(0x22c55e)         // Green for Y
-#define COLOR_THETA lv_color_hex(0xa78bfa)     // Purple for Theta
+// PID constant colors (for each row in editor)
+#define COLOR_KP lv_color_hex(0xa78bfa)        // Purple for kP (proportional gain)
+#define COLOR_KI lv_color_hex(0x0ea5e9)        // Blue for kI (integral gain)
+#define COLOR_KD lv_color_hex(0x22c55e)        // Green for kD (derivative gain)
+#define COLOR_WINDUP lv_color_hex(0xef4444)    // Red for anti-windup limit
 
-// ============================= Constructor ============================= //
+// Telemetry colors (position display)
+#define COLOR_X lv_color_hex(0xef4444)         // Red for X coordinate
+#define COLOR_Y lv_color_hex(0x22c55e)         // Green for Y coordinate
+#define COLOR_THETA lv_color_hex(0xa78bfa)     // Purple for heading
 
+// ============================= PID Tuner Constructor ============================= //
+// Creates interactive PID tuning interface with two modes: Lateral (forward/backward) and Angular (turning)
+// Layout: Top header (mode selector) | Left panel (PID editor with kP, kI, kD, anti-windup) | Right panel (position telemetry)
 rd::PIDTuner::PIDTuner(std::string name, lemlib::Chassis* chassis, pros::Controller* controller) {
-	this->view = rd_view_create(name.c_str());
-	this->chassis = chassis;
-	this->controller = controller;
-	this->current_mode = LAT;
-	this->selected_row = 0; // Start with kP selected
+	this->view = rd_view_create(name.c_str());  // Create robodash view
+	this->chassis = chassis;      // LemLib chassis for PID control and odometry
+	this->controller = controller;  // VEX controller for input (adjust PID values with buttons)
+	this->current_mode = LAT;     // Start in Lateral mode
+	this->selected_row = 0;       // Start with kP row selected
 	
-	// Initialize default values
-	lat_values = {0, 0, 0, 0};
+	// ==================== Initialize PID Values ====================
+	// lat_values: {kP, kI, kD, anti_windup} for lateral (forward/backward) movement
+	// ang_values: {kP, kI, kD, anti_windup} for angular (turning) movement
+	lat_values = {0, 0, 0, 0};  // Default to zero (will be loaded from SD card if available)
 	ang_values = {0, 0, 0, 0};
 	
-	// Default: do NOT use tuner PID (use lemlib defaults)
+	// ==================== Tuner Mode ====================
+	// Default: use LemLib's default PID values (not tuner values)
+	// Set to true to override LemLib PID with tuner values
 	use_tuner_pid = false;
 	
-	// Default increments
-	p_increment = 0.1f;
-	i_increment = 0.001f;
-	d_increment = 0.5f;
-	windup_increment = 0.1f;
+	// ==================== Increment Sizes ====================
+	// Adjust PID values by these amounts per button press
+	p_increment = 0.1f;      // kP changes by 0.1 per press
+	i_increment = 0.001f;    // kI changes by 0.001 per press (small adjustments)
+	d_increment = 0.5f;      // kD changes by 0.5 per press
+	windup_increment = 0.1f;  // Anti-windup limit changes by 0.1 per press
 	
-	// Try to load saved PID values from SD card
+	// ==================== Load Saved PID Values ====================
+	// Try to load PID values from SD card file (S:/pid_values.txt)
 	// If file doesn't exist, values remain at 0
 	load_from_sd_card();
 
-	// Set pure black background and account for 32px top bar
-	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
-	lv_obj_set_style_pad_top(view->obj, 0, 0);
-	lv_obj_set_height(view->obj, 240); // 272 - 32 = 240
+	// ==================== UI Styling ====================
+	lv_obj_set_style_bg_color(view->obj, color_bg, 0);  // Dark background
+	lv_obj_set_style_pad_top(view->obj, 0, 0);          // No top padding (header starts at top)
+	lv_obj_set_height(view->obj, 240);                  // 240px height (272px screen - 32px robodash bar)
 
-	// Initialize UI components
-	init_header();
-	init_main_panels();
-	init_pid_editor();
-	init_telemetry_panel();
+	// ==================== Create UI Components ====================
+	init_header();           // Top bar with LAT/ANG mode toggle
+	init_main_panels();      // Left and right panels (containers)
+	init_pid_editor();       // Left panel: PID value editor (4 rows: kP, kI, kD, anti-windup)
+	init_telemetry_panel();  // Right panel: X/Y/Theta position display
 	
-	// Initial display update
-	update_mode_toggle();
-	update_pid_displays();
-	update_row_highlight();
+	// ==================== Initial Display Update ====================
+	update_mode_toggle();    // Highlight active mode (LAT or ANG)
+	update_pid_displays();   // Show current PID values
+	update_row_highlight();  // Highlight selected row (kP)
 }
 
 // ============================= Header Initialization ============================= //
-
+// Top bar with LAT/ANG mode toggle buttons
 void rd::PIDTuner::init_header() {
-	// Header bar - 36px height, full width
+	// ==================== Header Bar ====================
+	// Full-width top bar (36px height) with mode toggle buttons centered
 	header_bar = lv_obj_create(view->obj);
-	lv_obj_set_size(header_bar, LV_PCT(100), 36);
-	lv_obj_set_pos(header_bar, 0, 0);
-	lv_obj_set_style_bg_color(header_bar, color_bg, 0);
-	lv_obj_set_style_border_width(header_bar, 0, 0);
-	lv_obj_set_style_border_side(header_bar, LV_BORDER_SIDE_BOTTOM, 0);
+	lv_obj_set_size(header_bar, LV_PCT(100), 36);  // Full width, 36px height
+	lv_obj_set_pos(header_bar, 0, 0);               // Top of screen
+	lv_obj_set_style_bg_color(header_bar, color_bg, 0);  // Dark background
+	lv_obj_set_style_border_width(header_bar, 0, 0);    // No border on sides
+	lv_obj_set_style_border_side(header_bar, LV_BORDER_SIDE_BOTTOM, 0);  // Bottom border only
 	lv_obj_set_style_border_color(header_bar, color_border, 0);
-	lv_obj_set_style_pad_all(header_bar, 0, 0);
-	lv_obj_set_style_radius(header_bar, 0, 0);
+	lv_obj_set_style_pad_all(header_bar, 0, 0);    // No padding
+	lv_obj_set_style_radius(header_bar, 0, 0);     // No rounded corners
 	lv_obj_clear_flag(header_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-	// Container for two-button tab switcher (centered vertically)
+	// ==================== Tab Switcher Container ====================
+	// Centered container for two mode buttons (LAT and ANG)
 	lv_obj_t *tab_container = lv_obj_create(header_bar);
-	lv_obj_set_size(tab_container, 130, 26);
-	lv_obj_align(tab_container, LV_ALIGN_CENTER, 0, 0);
-	lv_obj_set_style_bg_opa(tab_container, LV_OPA_TRANSP, 0);
+	lv_obj_set_size(tab_container, 130, 26);  // Wide enough for two 63px buttons + 4px gap
+	lv_obj_align(tab_container, LV_ALIGN_CENTER, 0, 0);  // Center horizontally and vertically
+	lv_obj_set_style_bg_opa(tab_container, LV_OPA_TRANSP, 0);  // Transparent (just a layout container)
 	lv_obj_set_style_border_width(tab_container, 0, 0);
 	lv_obj_set_style_pad_all(tab_container, 0, 0);
-	lv_obj_set_style_pad_column(tab_container, 4, 0);
+	lv_obj_set_style_pad_column(tab_container, 4, 0);  // 4px gap between buttons
 	lv_obj_clear_flag(tab_container, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_set_layout(tab_container, LV_LAYOUT_FLEX);
 	lv_obj_set_flex_flow(tab_container, LV_FLEX_FLOW_ROW);

@@ -132,6 +132,15 @@ class MotorTelemetry {
 	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::Motor*, const char*>> &motors, pros::Controller* controller = nullptr);
 
 	/**
+	 * @brief Create a Motor Telemetry screen with motor groups and individual motors
+	 * @param name Name to display on screen
+	 * @param groups Vector of {motor_group, name} tuples - motor groups
+	 * @param individual_motors Vector of {motor*, name} tuples - individual motors
+	 * @param controller Optional controller for navigation
+	 */
+	MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups, const std::vector<std::tuple<pros::Motor*, const char*>> &individual_motors, pros::Controller* controller = nullptr);
+
+	/**
 	 * @brief Update all motor data
 	 * @param motors Array/vector of motor data
 	 */
@@ -150,6 +159,14 @@ class MotorTelemetry {
 	void update_from_motors(const std::vector<std::tuple<pros::Motor*, const char*>> &motors);
 	
 	/**
+	 * @brief Build motor data for a single motor by port
+	 * @param port Motor port (can be negative for reversed motors)
+	 * @param name Display name for the motor
+	 * @return motor_data_t structure with current motor state
+	 */
+	motor_data_t build_motor_data(int8_t port, const char* name);
+	
+	/**
 	 * @brief Auto-update using stored motor groups (if constructor with groups was used)
 	 */
 	void auto_update();
@@ -158,6 +175,24 @@ class MotorTelemetry {
 	 * @brief Set this view to the active view
 	 */
 	void focus();
+	
+	/**
+	 * @brief Get the RoboDash view object
+	 * @return Pointer to the view object
+	 */
+	rd_view_t* get_view() const { return view; }
+	
+	/**
+	 * @brief Get the currently active metric index
+	 * @return Active metric (0=VEL, 1=PWR, 2=CUR, 3=TEMP, 4=TRQ)
+	 */
+	int get_active_metric() const { return active_metric; }
+	
+	/**
+	 * @brief Handle controller input for metric switching
+	 * Should be called regularly when view is active
+	 */
+	void handle_controller_input();
 
 	/// @}
 };

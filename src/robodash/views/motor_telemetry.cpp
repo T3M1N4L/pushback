@@ -8,8 +8,11 @@
 
 // ============================= Constants ============================= //
 
-// Grace period after motor reconnects before trusting readings (milliseconds)
-static const uint32_t RECONNECT_GRACE_MS = 250;
+// ==================== Connection Grace Period ====================
+// After motor reconnects, first few readings may be stale (cached values from before disconnect)
+// Wait 250ms after reconnection before displaying data to avoid showing garbage values
+// Example: Motor unplugged showing "4000 RPM" due to stale buffer → grace period → correct "0 RPM"
+static const uint32_t RECONNECT_GRACE_MS = 250;  // Milliseconds to wait after reconnection
 
 // ============================= Color Definitions ============================= //
 
@@ -144,6 +147,34 @@ rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tupl
 	
 	// Count motors
 	this->motor_count = motors.size() > 8 ? 8 : (motors.size() < 1 ? 1 : motors.size());
+
+	// Set pure black background and account for 32px top bar
+	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
+	lv_obj_set_style_pad_top(view->obj, 0, 0);
+	lv_obj_set_height(view->obj, 240); // 272 - 32 = 240
+
+	// Initialize UI components
+	init_header();
+	init_motor_grid(this->motor_count);
+	update_metric_label();
+}
+
+rd::MotorTelemetry::MotorTelemetry(std::string name, const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups, const std::vector<std::tuple<pros::Motor*, const char*>> &individual_motors, pros::Controller* controller) {
+	this->view = rd_view_create(name.c_str());
+	this->active_metric = 0; // Start with Velocity
+	this->has_stored_groups = true;
+	this->has_stored_motors = true;
+	this->stored_groups = groups;
+	this->stored_motors = individual_motors;
+	this->controller = controller;
+	
+	// Count total motors from both groups and individual motors
+	int total_motors = 0;
+	for (const auto &[group, name] : groups) {
+		total_motors += group->get_port_all().size();
+	}
+	total_motors += individual_motors.size();
+	this->motor_count = total_motors > 8 ? 8 : (total_motors < 1 ? 1 : total_motors);
 
 	// Set pure black background and account for 32px top bar
 	lv_obj_set_style_bg_color(view->obj, color_bg, 0);
@@ -504,93 +535,104 @@ void rd::MotorTelemetry::update(const std::vector<motor_data_t> &motors) {
 	}
 }
 
-void rd::MotorTelemetry::update_from_groups(const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups) {
-	std::vector<motor_data_t> motors;
-	uint32_t current_time = pros::millis();
+// ============================= Motor Data Builder ============================= //
+// Queries motor telemetry and handles connection detection with grace period
+// Returns motor_data_t struct with all metrics (velocity, power, current, temp, torque)
+
+rd::motor_data_t rd::MotorTelemetry::build_motor_data(int8_t port, const char* name) {
+	motor_data_t motor_data;
+	uint32_t current_time = pros::millis();  // Current timestamp for grace period calculation
+	int8_t abs_port = std::abs(port);         // Absolute port number (ports can be negative for reversal)
 	
-	for (const auto &[group, name] : groups) {
-		// Get port list from motor group
-		auto ports = group->get_port_all();
+	motor_data.port = abs_port;  // Store port number
+	motor_data.name = name;      // Store display name (e.g., "Left Front")
+	
+	// ==================== Connection Detection (2 out of 3 signals) ====================
+	// PROS motor API returns error codes when motor is disconnected or communication fails
+	// Check 3 signals: velocity, temperature, current draw
+	// Require 2 out of 3 to be valid for "connected" status (reduces false negatives)
+	
+	double raw_vel = pros::c::motor_get_actual_velocity(abs_port);     // RPM (or PROS_ERR_F if disconnected)
+	double raw_temp = pros::c::motor_get_temperature(abs_port);        // Celsius (or PROS_ERR_F if disconnected)
+	int32_t raw_current_ma = pros::c::motor_get_current_draw(abs_port); // Milliamps (or PROS_ERR if disconnected)
+	
+	// Validate each signal: check for error codes and invalid values (NaN, Inf, negative temp)
+	bool vel_valid = (raw_vel != PROS_ERR_F && !std::isnan(raw_vel) && !std::isinf(raw_vel));
+	bool temp_valid = (raw_temp != PROS_ERR_F && !std::isnan(raw_temp) && raw_temp > 0.0);  // Temp should be positive
+	bool current_valid = (raw_current_ma != PROS_ERR);
+	
+	// Count valid signals (require 2 out of 3 for connection)
+	int valid_count = (vel_valid ? 1 : 0) + (temp_valid ? 1 : 0) + (current_valid ? 1 : 0);
+	bool is_connected = (valid_count >= 2);  // 2 or 3 valid signals = motor is connected
+	
+	// ==================== Reconnect Grace Period ====================
+	// When motor reconnects, first few readings may be stale/invalid
+	// Grace period: ignore first 250ms of data after reconnection to avoid displaying garbage
+	auto &state = motor_states[abs_port];  // Track connection state per motor
+	bool just_reconnected = false;
+	
+	// Detect rising edge: was disconnected, now connected
+	if (is_connected && !state.was_connected) {
+		state.reconnect_time_ms = current_time;  // Record reconnection time
+		just_reconnected = true;
+	}
+	state.was_connected = is_connected;  // Update state for next cycle
+	
+	// If within grace period, treat as disconnected (prevents showing stale data)
+	if (just_reconnected && (current_time - state.reconnect_time_ms) < RECONNECT_GRACE_MS) {
+		is_connected = false;  // Override connection status during grace period
+	}
+	
+	motor_data.connected = is_connected;
+	
+	// ==================== Read Motor Metrics ====================
+	if (is_connected) {
+		// ==================== Gearset Detection ====================
+		// VEX V5 motors have 3 gearsets: 0=red/100RPM, 1=green/200RPM, 2=blue/600RPM
+		pros::motor_gearset_e_t gearset = pros::c::motor_get_gearing(abs_port);
+		int gear_idx = (int)gearset;
+		if (gear_idx < 0 || gear_idx > 2) gear_idx = 2;  // Clamp to valid range (default to blue)
+		motor_data.gearing = gear_idx;
 		
-		// Query each motor individually using C API
+		// ==================== Velocity (RPM) ====================
+		// Apply port reversal: negative port = reverse motor direction
+		float velocity = (float)raw_vel;
+		if (port < 0) velocity = -velocity;  // Flip sign for negative ports
+		
+		motor_data.velocity_rpm = velocity;  // Store RPM with correct sign
+		
+		// ==================== Other Metrics ====================
+		motor_data.power_w = (float)pros::c::motor_get_power(abs_port);        // Watts (instantaneous power)
+		motor_data.current_a = (float)(pros::c::motor_get_current_draw(abs_port) / 1000.0);  // Amps (convert mA to A)
+		motor_data.temp_c = (float)raw_temp;                                    // Celsius (motor temperature)
+		motor_data.torque_nm = (float)pros::c::motor_get_torque(abs_port);     // Newton-meters (instantaneous torque)
+	} else {
+		// ==================== Disconnected State ====================
+		// Set all values to safe defaults (zero) when motor is not connected
+		motor_data.gearing = 2;         // Default to blue gearset (common choice)
+		motor_data.velocity_rpm = 0;
+		motor_data.power_w = 0;
+		motor_data.current_a = 0;
+		motor_data.temp_c = 0;
+		motor_data.torque_nm = 0;
+	}
+	
+	return motor_data;  // Return populated struct
+}
+
+// ============================= Update Methods (Telemetry Update) ============================= //
+
+// ==================== Update from Motor Groups ====================
+// Extract all motor ports from groups and build telemetry data for each
+// Groups are collections of motors (e.g., leftMotors = ports -1, 2, -3)
+void rd::MotorTelemetry::update_from_groups(const std::vector<std::tuple<pros::MotorGroup*, const char*>> &groups) {
+	std::vector<motor_data_t> motors;  // Collected motor data for all motors
+	
+	// Iterate through each motor group
+	for (const auto &[group, name] : groups) {  // Destructure tuple: (motor_group, display_name)
+		auto ports = group->get_port_all();  // Get all ports in group (e.g., [-1, 2, -3])
 		for (size_t i = 0; i < ports.size(); i++) {
-			motor_data_t motor_data;
-			int8_t port = ports[i];
-			int8_t abs_port = std::abs(port);
-			motor_data.port = abs_port;
-			motor_data.name = name;
-			
-			// === ROBUST CONNECTION DETECTION ===
-			// Use multiple signals instead of just velocity
-			double raw_vel = pros::c::motor_get_actual_velocity(abs_port);
-			double raw_temp = pros::c::motor_get_temperature(abs_port);
-			int32_t raw_current_ma = pros::c::motor_get_current_draw(abs_port);
-			
-			// Check all three signals for validity
-			bool vel_valid = (raw_vel != PROS_ERR_F && !std::isnan(raw_vel) && !std::isinf(raw_vel));
-			bool temp_valid = (raw_temp != PROS_ERR_F && !std::isnan(raw_temp) && raw_temp > 0.0);
-			bool current_valid = (raw_current_ma != PROS_ERR);
-			
-			// Motor is connected if at least 2 out of 3 signals are valid
-			// (more robust than single signal check)
-			int valid_count = (vel_valid ? 1 : 0) + (temp_valid ? 1 : 0) + (current_valid ? 1 : 0);
-			bool is_connected = (valid_count >= 2);
-			
-			// === RECONNECT GRACE PERIOD ===
-			// Track connection state changes
-			auto &state = motor_states[abs_port];
-			bool just_reconnected = false;
-			
-			if (is_connected && !state.was_connected) {
-				// Motor just reconnected - start grace period
-				state.reconnect_time_ms = current_time;
-				just_reconnected = true;
-			}
-			state.was_connected = is_connected;
-			
-			// During grace period, show as disconnected to avoid stale data
-			if (just_reconnected && (current_time - state.reconnect_time_ms) < RECONNECT_GRACE_MS) {
-				is_connected = false;
-			}
-			
-			motor_data.connected = is_connected;
-			
-			if (is_connected) {
-				// === GEARSET MAPPING ===
-				// PROS motor_gearset_e_t values:
-				// E_MOTOR_GEARSET_36 = 0 -> 100 RPM (red)
-				// E_MOTOR_GEARSET_18 = 1 -> 200 RPM (green)
-				// E_MOTOR_GEARSET_06 = 2 -> 600 RPM (blue)
-				pros::motor_gearset_e_t gearset = pros::c::motor_get_gearing(abs_port);
-				int gear_idx = (int)gearset;
-				
-				// Validate gearset or fall back to safe default (blue/600)
-				if (gear_idx < 0 || gear_idx > 2) {
-					gear_idx = 2; // Default to blue (600 RPM) if invalid
-				}
-				motor_data.gearing = gear_idx;
-				
-				// === VELOCITY PROCESSING ===
-				// Apply motor reversal to velocity if port was negative
-				float velocity = (float)raw_vel;
-				if (port < 0) velocity = -velocity;
-				
-				motor_data.velocity_rpm = velocity;
-				motor_data.power_w = (float)pros::c::motor_get_power(abs_port);
-				motor_data.current_a = (float)(pros::c::motor_get_current_draw(abs_port) / 1000.0);
-				motor_data.temp_c = (float)raw_temp;
-				motor_data.torque_nm = (float)pros::c::motor_get_torque(abs_port);
-			} else {
-				// Disconnected - zero out all values
-				motor_data.gearing = 2; // Default to blue for UI display
-				motor_data.velocity_rpm = 0;
-				motor_data.power_w = 0;
-				motor_data.current_a = 0;
-				motor_data.temp_c = 0;
-				motor_data.torque_nm = 0;
-			}
-			
-			motors.push_back(motor_data);
+			motors.push_back(build_motor_data(ports[i], name));  // Query each motor individually
 		}
 	}
 	
@@ -599,127 +641,80 @@ void rd::MotorTelemetry::update_from_groups(const std::vector<std::tuple<pros::M
 
 void rd::MotorTelemetry::update_from_motors(const std::vector<std::tuple<pros::Motor*, const char*>> &motors) {
 	std::vector<motor_data_t> motor_data_list;
-	uint32_t current_time = pros::millis();
 	
 	for (const auto &[motor, name] : motors) {
-		motor_data_t motor_data;
-		int8_t port = motor->get_port();
-		int8_t abs_port = std::abs(port);
-		motor_data.port = abs_port;
-		motor_data.name = name;
-		
-		// === ROBUST CONNECTION DETECTION ===
-		// Use multiple signals instead of just velocity
-		double raw_vel = pros::c::motor_get_actual_velocity(abs_port);
-		double raw_temp = pros::c::motor_get_temperature(abs_port);
-		int32_t raw_current_ma = pros::c::motor_get_current_draw(abs_port);
-		
-		// Check all three signals for validity
-		bool vel_valid = (raw_vel != PROS_ERR_F && !std::isnan(raw_vel) && !std::isinf(raw_vel));
-		bool temp_valid = (raw_temp != PROS_ERR_F && !std::isnan(raw_temp) && raw_temp > 0.0);
-		bool current_valid = (raw_current_ma != PROS_ERR);
-		
-		// Motor is connected if at least 2 out of 3 signals are valid
-		int valid_count = (vel_valid ? 1 : 0) + (temp_valid ? 1 : 0) + (current_valid ? 1 : 0);
-		bool is_connected = (valid_count >= 2);
-		
-		// === RECONNECT GRACE PERIOD ===
-		auto &state = motor_states[abs_port];
-		bool just_reconnected = false;
-		
-		if (is_connected && !state.was_connected) {
-			// Motor just reconnected - start grace period
-			state.reconnect_time_ms = current_time;
-			just_reconnected = true;
-		}
-		state.was_connected = is_connected;
-		
-		// During grace period, show as disconnected to avoid stale data
-		if (just_reconnected && (current_time - state.reconnect_time_ms) < RECONNECT_GRACE_MS) {
-			is_connected = false;
-		}
-		
-		motor_data.connected = is_connected;
-		
-		if (is_connected) {
-			// === GEARSET MAPPING ===
-			pros::motor_gearset_e_t gearset = pros::c::motor_get_gearing(abs_port);
-			int gear_idx = (int)gearset;
-			
-			// Validate gearset or fall back to safe default (blue/600)
-			if (gear_idx < 0 || gear_idx > 2) {
-				gear_idx = 2; // Default to blue (600 RPM) if invalid
-			}
-			motor_data.gearing = gear_idx;
-			
-			// === VELOCITY PROCESSING ===
-			// Get velocity (already accounts for motor reversal via get_port())
-			float velocity = (float)raw_vel;
-			
-			motor_data.velocity_rpm = velocity;
-			motor_data.power_w = (float)pros::c::motor_get_power(abs_port);
-			motor_data.current_a = (float)(pros::c::motor_get_current_draw(abs_port) / 1000.0);
-			motor_data.temp_c = (float)raw_temp;
-			motor_data.torque_nm = (float)pros::c::motor_get_torque(abs_port);
-		} else {
-			// Disconnected - zero out all values
-			motor_data.gearing = 2; // Default to blue for UI display
-			motor_data.velocity_rpm = 0;
-			motor_data.power_w = 0;
-			motor_data.current_a = 0;
-			motor_data.temp_c = 0;
-			motor_data.torque_nm = 0;
-		}
-		
-		motor_data_list.push_back(motor_data);
+		motor_data_list.push_back(build_motor_data(motor->get_port(), name));
 	}
 	
 	update(motor_data_list);
 }
 
+void rd::MotorTelemetry::handle_controller_input() {
+	if (controller == nullptr || rd_view_get_current() != this->view) {
+		return;
+	}
+	
+	// LEFT: Previous metric
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
+		active_metric--;
+		if (active_metric < 0) active_metric = 4;
+		update_metric_label();
+	}
+	
+	// RIGHT: Next metric
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_RIGHT)) {
+		active_metric++;
+		if (active_metric > 4) active_metric = 0;
+		update_metric_label();
+	}
+}
+
 void rd::MotorTelemetry::auto_update() {
-	if (has_stored_groups) {
+	// Static state for controller display tracking
+	static int last_metric = -1;
+	static bool first_update = true;
+	static bool was_active = false;
+	
+	// Update motor data from stored groups and/or motors
+	if (has_stored_groups && has_stored_motors) {
+		// Combine data from both groups and individual motors
+		std::vector<motor_data_t> all_motors;
+		
+		// Add motors from groups
+		for (const auto &[group, name] : stored_groups) {
+			auto ports = group->get_port_all();
+			for (auto port : ports) {
+				all_motors.push_back(build_motor_data(port, name));
+			}
+		}
+		
+		// Add individual motors
+		for (const auto &[motor, name] : stored_motors) {
+			all_motors.push_back(build_motor_data(motor->get_port(), name));
+		}
+		
+		update(all_motors);
+	} else if (has_stored_groups) {
 		update_from_groups(stored_groups);
 	} else if (has_stored_motors) {
 		update_from_motors(stored_motors);
 	}
 	
-	// Handle controller input
+	// Handle controller input for metric switching
+	handle_controller_input();
+	
+	// Handle controller display (only when this view is active)
 	if (controller != nullptr && rd_view_get_current() == this->view) {
-		// LEFT: Previous metric
-		if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
-			active_metric--;
-			if (active_metric < 0) active_metric = 4;
-			update_metric_label();
-		}
-		
-		// RIGHT: Next metric
-		if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_RIGHT)) {
-			active_metric++;
-			if (active_metric > 4) active_metric = 0;
-			update_metric_label();
-		}
-		
-		// Update controller LCD when metric changes
-		static int last_metric = -1;
-		static bool first_update = true;
-		static bool was_active = false;
-		
-		// Only update if this is the active view
-		bool is_active = (rd_view_get_current() == this->view);
-		if (!is_active) {
-			was_active = false;
-			return;
-		}
-		
-		// Clear screen when view just became active
+		// Check if view just became active
 		if (!was_active) {
 			controller->clear();
 			pros::delay(50);
 			was_active = true;
-			first_update = true; // Force update after clearing
+			first_update = true; // Force display update
+			last_metric = -1;
 		}
 		
+		// Update controller LCD when metric changes
 		if (first_update || active_metric != last_metric) {
 			first_update = false;
 			last_metric = active_metric;
@@ -727,22 +722,30 @@ void rd::MotorTelemetry::auto_update() {
 			const char *metric_names[] = {"Velocity", "Power", "Current", "Temperature", "Torque"};
 			const char *metric_units[] = {"RPM", "W", "A", "C", "Nm"};
 			
+			// VEX controller LCD is 16 characters wide
+			// Pad strings to 16 chars to clear any leftover characters
+			
 			// Line 0: Screen name and current metric
-			char line0[32];
-			snprintf(line0, sizeof(line0), "Motor: %s", metric_names[active_metric]);
+			char line0[20];
+			snprintf(line0, sizeof(line0), "Motor:%-10s", metric_names[active_metric]);
+			line0[16] = '\0'; // Ensure exactly 16 chars
 			controller->set_text(0, 0, line0);
 			pros::delay(50);
 			
 			// Line 1: Metric unit
-			char line1[32];
-			snprintf(line1, sizeof(line1), "Unit: %s", metric_units[active_metric]);
+			char line1[20];
+			snprintf(line1, sizeof(line1), "Unit: %-10s", metric_units[active_metric]);
+			line1[16] = '\0'; // Ensure exactly 16 chars
 			controller->set_text(1, 0, line1);
 			pros::delay(50);
 			
-			// Line 2: Empty
-			controller->set_text(2, 0, "");
+			// Line 2: Navigation hint
+			controller->set_text(2, 0, "< LEFT | RIGHT >");
 			pros::delay(50);
 		}
+	} else {
+		// Reset state when view is not active
+		was_active = false;
 	}
 }
 
