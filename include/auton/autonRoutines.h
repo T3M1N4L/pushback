@@ -21,3 +21,4 @@ void elim_auton();
 void awp_auton();
 void skills_auton();
 void angular_test_auton();
+void lateral_test_auton();

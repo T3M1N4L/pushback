@@ -20,12 +20,9 @@ void doNothing() {
 // color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
 rd::Selector selector({
     {"Angular Test Auton", angular_test_auton, "", 60},
-    {"Left Auton", left_auton, "", 0},
-    {"Carry Auton", carry_auton, "", 60},
-    {"Elim Auton", elim_auton, "", 300},
-    {"AWP Auton", awp_auton, "", 220},
-    {"Skills Auton", skills_auton, "", 120},
-    {"Do Nothing", doNothing, "", 180}
+    {"Lateral Test Auton", lateral_test_auton, "", 300},
+    {"Skills Auton", skills_auton, "", 180},
+
 }, &controller);
 
 // Create image widget
@@ -64,7 +61,8 @@ void initialize() {
     console.println("Calibrating sensors...");
     
     chassis.calibrate(); // calibrate sensors
-    
+    rightMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST); // set brake mode to hold for better driver control
+    leftMotors.set_brake_mode(pros::E_MOTOR_BRAKE_COAST); // set brake mode to hold for better driver control
     console.println("Calibration complete!");
  
     // Configure PID tuner increment values (optional)

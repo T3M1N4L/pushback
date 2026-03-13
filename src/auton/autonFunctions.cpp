@@ -60,7 +60,7 @@ void score_midgoal(int voltage = 127)
     pulldown.retract();
     wing.extend();
     intakeMotor.move_velocity(600);
-    topMotor.move(0);
+    topMotor.move_velocity(100);
 }
 
 
