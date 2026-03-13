@@ -55,12 +55,12 @@ void intake_stop()
     topMotor.move(0);
 }
 
-void score_midgoal(int voltage = 90)
+void score_midgoal(int voltage = 127)
 {
     pulldown.retract();
     wing.extend();
-    intakeMotor.move(voltage);
-    topMotor.move(-20);
+    intakeMotor.move_velocity(600);
+    topMotor.move(0);
 }
 
 

@@ -99,6 +99,34 @@ void rd::PIDTuner::init_header() {
 	lv_obj_set_style_radius(header_bar, 0, 0);     // No rounded corners
 	lv_obj_clear_flag(header_bar, LV_OBJ_FLAG_SCROLLABLE);
 
+	// Top-left test button (depends on currently selected mode)
+	test_btn_container = lv_obj_create(header_bar);
+	lv_obj_set_size(test_btn_container, 92, 26);
+	lv_obj_align(test_btn_container, LV_ALIGN_LEFT_MID, 4, 0);
+	lv_obj_set_style_bg_opa(test_btn_container, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(test_btn_container, 0, 0);
+	lv_obj_set_style_pad_all(test_btn_container, 0, 0);
+	lv_obj_clear_flag(test_btn_container, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_layout(test_btn_container, LV_LAYOUT_FLEX);
+	lv_obj_set_flex_flow(test_btn_container, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(test_btn_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+	lat_test_btn = lv_btn_create(test_btn_container);
+	lv_obj_set_size(lat_test_btn, 92, 26);
+	lv_obj_set_style_bg_color(lat_test_btn, COLOR_CARD_BG, 0);
+	lv_obj_set_style_border_color(lat_test_btn, COLOR_LAT, 0);
+	lv_obj_set_style_border_width(lat_test_btn, 1, 0);
+	lv_obj_set_style_radius(lat_test_btn, 4, 0);
+	lv_obj_set_style_shadow_width(lat_test_btn, 0, 0);
+	lv_obj_set_style_bg_color(lat_test_btn, COLOR_CARD_BG, LV_STATE_PRESSED);
+	lv_obj_set_user_data(lat_test_btn, nullptr);
+	lv_obj_add_event_cb(lat_test_btn, test_run_cb, LV_EVENT_CLICKED, this);
+	test_btn_label = lv_label_create(lat_test_btn);
+	lv_label_set_text(test_btn_label, "FORWARD 48");
+	lv_obj_set_style_text_font(test_btn_label, &lv_font_montserrat_10, 0);
+	lv_obj_set_style_text_color(test_btn_label, COLOR_LAT, 0);
+	lv_obj_center(test_btn_label);
+
 	// ==================== Tab Switcher Container ====================
 	// Centered container for two mode buttons (LAT and ANG)
 	lv_obj_t *tab_container = lv_obj_create(header_bar);
@@ -436,9 +464,8 @@ void rd::PIDTuner::draw_tachometer(float theta) {
 // ============================= Update Methods ============================= //
 
 void rd::PIDTuner::update_mode_toggle() {
-	// Get both buttons from header
-	lv_obj_t *header = lv_obj_get_parent(lv_obj_get_parent(mode_toggle_btn));
-	lv_obj_t *tab_container = lv_obj_get_child(header, 0);
+	// Get both mode buttons from tab container
+	lv_obj_t *tab_container = lv_obj_get_parent(mode_toggle_btn);
 	lv_obj_t *lat_btn = lv_obj_get_child(tab_container, 0);
 	lv_obj_t *ang_btn = lv_obj_get_child(tab_container, 1);
 	
@@ -454,6 +481,11 @@ void rd::PIDTuner::update_mode_toggle() {
 		lv_obj_set_style_border_color(ang_btn, color_border, 0);
 		lv_obj_t *ang_label = lv_obj_get_child(ang_btn, 0);
 		lv_obj_set_style_text_color(ang_label, COLOR_TEXT_MED, 0);
+
+		// Update test button for lateral test
+		lv_obj_set_style_border_color(lat_test_btn, COLOR_LAT, 0);
+		lv_label_set_text(test_btn_label, "FORWARD 48");
+		lv_obj_set_style_text_color(test_btn_label, COLOR_LAT, 0);
 	} else {
 		// Dim LAT button
 		lv_obj_set_style_bg_color(lat_btn, COLOR_CARD_BG, 0);
@@ -466,6 +498,11 @@ void rd::PIDTuner::update_mode_toggle() {
 		lv_obj_set_style_border_color(ang_btn, COLOR_ANG, 0);
 		lv_obj_t *ang_label = lv_obj_get_child(ang_btn, 0);
 		lv_obj_set_style_text_color(ang_label, lv_color_hex(0x000000), 0);
+
+		// Update test button for angular test
+		lv_obj_set_style_border_color(lat_test_btn, COLOR_ANG, 0);
+		lv_label_set_text(test_btn_label, "TURN 180");
+		lv_obj_set_style_text_color(test_btn_label, COLOR_ANG, 0);
 	}
 	update_pid_displays();
 }
@@ -588,10 +625,33 @@ void rd::PIDTuner::pid_adjust_cb(lv_event_t *event) {
 	screen->apply_pid_to_chassis();
 }
 
+void rd::PIDTuner::test_run_cb(lv_event_t *event) {
+	rd::PIDTuner *screen = (rd::PIDTuner *)lv_event_get_user_data(event);
+	if (!screen) return;
+	screen->run_selected_test();
+}
+
 // ============================= Helper Methods ============================= //
 
 rd::PIDTuner::PIDValues& rd::PIDTuner::get_current_values() {
 	return (current_mode == LAT) ? lat_values : ang_values;
+}
+
+void rd::PIDTuner::run_test_for_mode(Mode mode) {
+	if (!chassis) return;
+
+	// Reset odometry before each test run
+	chassis->setPose(0, 0, 0);
+
+	if (mode == LAT) {
+		chassis->moveToPose(48, 0, 0, 4000);
+	} else {
+		chassis->turnToHeading(180, 3000);
+	}
+}
+
+void rd::PIDTuner::run_selected_test() {
+	run_test_for_mode(current_mode);
 }
 
 void rd::PIDTuner::apply_pid_to_chassis() {
@@ -778,6 +838,11 @@ void rd::PIDTuner::handle_controller_input() {
 		apply_pid_to_chassis();
 		save_to_sd_card();
 	}
+
+	// B: Run selected mode test (LAT => moveToPose 48, ANG => turnToHeading 180)
+	if (controller->get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
+		run_selected_test();
+	}
 	
 	// Update controller LCD when values change
 	static rd::PIDTuner::Mode last_mode = LAT;
@@ -843,4 +908,8 @@ void rd::PIDTuner::handle_controller_input() {
 
 void rd::PIDTuner::focus() {
 	rd_view_focus(this->view);
+}
+
+bool rd::PIDTuner::is_active() const {
+	return rd_view_get_current() == this->view;
 }

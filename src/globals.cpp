@@ -46,13 +46,13 @@ pros::Motor topMotor(1, pros::v5::MotorGears::blue);     // top roller motor on 
 
 // ------------------------ Sensors and Odometry ------------------------
 
-pros::Imu imu(19);                 // Inertial sensor on port 19 
-pros::Rotation horizontalEnc(20);  // horizontal tracking wheel on port 20
-pros::Rotation verticalEnc(-16);   // vertical tracking wheel on port 16 [reversed]
-pros::Distance rightDistance(6);   // right distance sensor on port 6
-pros::Distance leftDistance(12);   // left distance sensor on port 12
-pros::Distance frontDistance(13);  // front distance sensor on port 13
-pros::Distance backDistance(11);   // back distance sensor on port 11
+pros::Imu imu(21);                 // Inertial sensor on port 19 
+pros::Rotation horizontalEnc(5);  // horizontal tracking wheel on port 20
+pros::Rotation verticalEnc(6);   // vertical tracking wheel on port 16 [reversed]
+ pros::Distance rightDistance(11);   // right distance sensor on port 6
+ pros::Distance leftDistance(11);   // left distance sensor on port 12
+ pros::Distance frontDistance(11);  // front distance sensor on port 13
+ pros::Distance backDistance(11);   // back distance sensor on port 11
 
 
 
@@ -61,21 +61,21 @@ pros::Distance backDistance(11);   // back distance sensor on port 11
 lemlib::TrackingWheel horizontal_tracking_wheel(
       &horizontalEnc,           // horizontal rotation sensor
       lemlib::Omniwheel::NEW_2, // using new 2" omni for horizontal tracking
-      -6.37728606611,           // back = negative | front = positive. Offset of 6.4 inches
+      -1.25,           // back = negative | front = positive. Offset of 6.4 inches
       1
 ); 
 lemlib::TrackingWheel vertical_tracking_wheel(
       &verticalEnc,             // vertical rotation sensor
       lemlib::Omniwheel::NEW_2, // using new 2" omni for vertical tracking
-      0.110912828986            // left = negative | right = positive. Offset of 0.11 inches
+      0            // left = negative | right = positive. Offset of 0 inches
 );
 
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, nullptr, &horizontal_tracking_wheel, nullptr, &imu);
 
 // lateral PID controller
-lemlib::ControllerSettings lateral_controller(11,  // proportional gain (kP)
+lemlib::ControllerSettings lateral_controller(15,  // proportional gain (kP)
                                               0,   // integral gain (kI)
-                                              40,  // derivative gain (kD)
+                                              0,  // derivative gain (kD)
                                               3,   // anti windup
                                               0.5, // small error range, in inches
                                               50,  // small error range timeout, in milliseconds
@@ -85,9 +85,9 @@ lemlib::ControllerSettings lateral_controller(11,  // proportional gain (kP)
 );
 
 // angular PID controller
-lemlib::ControllerSettings angular_controller(3,      // proportional gain (kP)
-                                              0.0015, // integral gain (kI)
-                                              24,     // derivative gain (kD)
+lemlib::ControllerSettings angular_controller(6,      // proportional gain (kP)
+                                              0, // integral gain (kI)
+                                              0,     // derivative gain (kD)
                                               3,      // anti windup
                                               1,      // small error range, in inches
                                               25,     // small error range timeout, in milliseconds

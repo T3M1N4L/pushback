@@ -19,7 +19,7 @@ void doNothing() {
 // Format: {"Name", function, "image_path", color_hue}
 // color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
 rd::Selector selector({
-    {"Right Auton", right_auton, "", 0},
+    {"Angular Test Auton", angular_test_auton, "", 60},
     {"Left Auton", left_auton, "", 0},
     {"Carry Auton", carry_auton, "", 60},
     {"Elim Auton", elim_auton, "", 300},
@@ -68,7 +68,7 @@ void initialize() {
     console.println("Calibration complete!");
  
     // Configure PID tuner increment values (optional)
-    pidTuner.set_increments(0.1, 0.001, 0.5, 0.1);
+    pidTuner.set_increments(1, 0.001, 0.5, 0.1);
     
     // ============================= PID Tuner Mode ============================= //
     // Toggle between PID tuner values and lemlib defaults
@@ -169,6 +169,15 @@ void opcontrol() {
     // controller
     // loop to continuously update motors
     while (true) {
+        // When PID tuner view is active, block normal driver/mechanism controls
+        // so controller inputs only affect PID tuner.
+        if (pidTuner.is_active()) {
+            chassis.curvature(0, 0);
+            intake_stop();
+            pros::delay(10);
+            continue;
+        }
+
         // get joystick positions
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
@@ -201,14 +210,11 @@ void opcontrol() {
         }
         
         // Button mappings for tongue and middle goal
-        bool a_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_A);
         bool x_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_X);
 
-        // A toggles tongue
-        if (a_pressed) {
-            tongue.extend();
-        } else {
-            tongue.retract();
+        // A click toggles tongue
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+            tongue.toggle();
         }
 
         // X held scores middle goal (pulls down pulldown), otherwise stay extended

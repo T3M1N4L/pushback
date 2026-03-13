@@ -327,3 +327,15 @@ void skills_auton() {
     chassis.moveToPoint(-72 + 5.5, 0, 2000, {.forwards = true});
 
 }
+
+void angular_test_auton() {
+    chassis.setPose(0, 0, 0);
+    chassis.turnToHeading(90, 5000);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(180, 5000);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(270, 5000);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(360, 5000);
+    chassis.waitUntilDone();
+}   

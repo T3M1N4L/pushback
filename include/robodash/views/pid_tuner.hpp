@@ -57,6 +57,9 @@ class PIDTuner {
 	lv_obj_t *theta_label;
 	lv_obj_t *theta_unit;
 	lv_obj_t *tachometer;
+	lv_obj_t *test_btn_container;
+	lv_obj_t *lat_test_btn;
+	lv_obj_t *test_btn_label;
 
 	// State
 	enum Mode { LAT = 0, ANG = 1 };
@@ -96,10 +99,13 @@ class PIDTuner {
 	void update_telemetry();
 	void draw_tachometer(float theta);
 	void handle_controller_input();
+	void run_test_for_mode(Mode mode);
+	void run_selected_test();
 
 	// Button callbacks
 	static void mode_toggle_cb(lv_event_t *event);
 	static void pid_adjust_cb(lv_event_t *event);
+	static void test_run_cb(lv_event_t *event);
 	static void tacho_draw_cb(lv_event_t *event);
 
 	// Helper to get current PID values
@@ -163,6 +169,12 @@ class PIDTuner {
 	 * @brief Focus this view
 	 */
 	void focus();
+
+	/**
+	 * @brief Check if this PID tuner view is currently active
+	 * @return true if active view, false otherwise
+	 */
+	bool is_active() const;
 
 	/// @}
 };
