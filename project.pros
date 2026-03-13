@@ -328,8 +328,8 @@
     },
     "upload_options": {
       "icon": "alien",
-      "after": "run",
-      "description": "niga",
+      "after": "screen",
+      "description": "son",
       "slot": 1
     },
     "use_early_access": false
