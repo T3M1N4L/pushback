@@ -19,13 +19,13 @@ void doNothing() {
 // Format: {"Name", function, "image_path", color_hue}
 // color_hue: 0=red, 60=yellow, 120=green, 180=cyan, 220=blue, 300=magenta
 rd::Selector selector({
-    {"Right Auton", right_auton, "", 0},          // Red
-    {"Left Auton", left_auton, "", 0},            // Red
-    {"Carry Auton", carry_auton, "", 60},         // Yellow
-    {"Elim Auton", elim_auton, "", 300},          // Magenta
-    {"AWP Auton", awp_auton, "", 220},            // Blue
-    {"Skills Auton", skills_auton, "", 120},      // Green
-    {"Do Nothing", doNothing, "", 180}            // Cyan
+    {"Right Auton", right_auton, "", 0},
+    {"Left Auton", left_auton, "", 0},
+    {"Carry Auton", carry_auton, "", 60},
+    {"Elim Auton", elim_auton, "", 300},
+    {"AWP Auton", awp_auton, "", 220},
+    {"Skills Auton", skills_auton, "", 120},
+    {"Do Nothing", doNothing, "", 180}
 }, &controller);
 
 // Create image widget
@@ -176,22 +176,48 @@ void opcontrol() {
         chassis.curvature(leftY, rightX);
         
         // Button mappings for intake/scoring functions
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+        bool r1_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1);
+        bool r2_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2);
+        bool l1_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1);
+        bool l2_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2);
+        
+        if (r1_pressed && r2_pressed) {
+            score_longgoal();  // R1+R2 → score long goal
+        }
+        else if (r1_pressed) {
             storage();  // R1 → storage
         }
-        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-            score_longgoal();  // R2 → score long goal
-        }
-        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-            score_midgoal();  // L1 → score middle goal
-        }
-        else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-            score_bottomgoal();  // L2 → score bottom goal
+        else if (l1_pressed) {
+            score_bottomgoal();  // L1 → score low goal
         }
         else {
             intake_stop();  // Stop intake when no buttons pressed
         }
-  
+        // Wing control: L2 held extends wing (up)
+        if (l2_pressed) {
+            wing.extend();
+        } else {
+            wing.retract();
+        }
+        
+        // Button mappings for tongue and middle goal
+        bool a_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_A);
+        bool x_pressed = controller.get_digital(pros::E_CONTROLLER_DIGITAL_X);
+
+        // A toggles tongue
+        if (a_pressed) {
+            tongue.extend();
+        } else {
+            tongue.retract();
+        }
+
+        // X held scores middle goal (pulls down pulldown), otherwise stay extended
+        if (x_pressed) {
+            score_midgoal();
+        } else {
+            pulldown.extend();
+        }
+
         // delay to save resources
         pros::delay(10);
     }

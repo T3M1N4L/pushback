@@ -20,15 +20,15 @@ void score_longgoal(int voltage = 127);
 
 void score_midgoal(int voltage = 127);
 
-void score_longgoal_auton(int voltage = 127, Color allianceColor = Color::RED);
+void score_longgoal_auton(int voltage = 127);
 
 void intake_to_basket();
 
 void intake_stop();
 
-void resting_state(bool trapDoor_commanded = false);
+void resting_state();
 
-void matchload_state(bool state);
+void pulldown_state(bool state);
 
 void longgoal_prep();
 

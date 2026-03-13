@@ -7,12 +7,6 @@
 #include "pros/adi.hpp"
 #include "pros/motors.h"
 
-enum Color {
-    NONE = 0,
-    RED = 1,
-    BLUE = 2
-};
-
 
 struct State {
     float x, y, heading, linear_vel, angular_vel;
@@ -55,14 +49,10 @@ extern pros::Distance frontDistance;
 extern pros::Distance backDistance;
 
 
-extern pros::adi::Pneumatics trapDoor;
-extern pros::adi::Pneumatics matchload;
 extern pros::adi::Pneumatics basket;
-extern pros::adi::Pneumatics descore;
+extern pros::adi::Pneumatics pulldown;
 
 extern pros::adi::Pneumatics tongue;
 extern pros::adi::Pneumatics wing;
-
-extern Color allianceColor;
 extern bool midgoal_first;
 

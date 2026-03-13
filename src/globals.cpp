@@ -17,13 +17,13 @@ pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 
 // ------------------------------Drivetrain--------------------------------
-pros::MotorGroup rightMotors({8, // front most motor (port 8)
-                             -9, // top middle motor (port 9) [reversed]
-                             10  // middle motor (port 10)
+pros::MotorGroup rightMotors({-9, // front most motor (port 8)
+                             8, // top middle motor (port 9) [reversed]
+                             7  // middle motor (port 10)
 }, pros::MotorGears::blue); 
-pros::MotorGroup leftMotors({-1, // front most motor (port 1)
-                              2, // top middle motor (port 2) [reversed]
-                             -3  // middle motor (port 3)
+pros::MotorGroup leftMotors({2, // front most motor (port 1)
+                              -3, // top middle motor (port 2) [reversed]
+                             -4  // middle motor (port 3)
 }, pros::MotorGears::blue);
 
 // drivetrain settings
@@ -36,16 +36,13 @@ lemlib::Drivetrain drivetrain(&leftMotors,                 // left motor group
 );
 
 // ------------------------ Pneumatics --------------------------
-pros::adi::Pneumatics tongue('E', false); // tongue mech on port E, retracted initially
+pros::adi::Pneumatics tongue('A', false); // tongue mech on port E, retracted initially
 pros::adi::Pneumatics wing('B', false);   // wing mech on port B, retracted initially
-pros::adi::Pneumatics trapDoor('A', false); // trapDoor on port A, retracted initially  
-pros::adi::Pneumatics matchload('C', false); // matchload on port C, retracted initially
-pros::adi::Pneumatics basket('D', false); // basket on port D, retracted initially
-pros::adi::Pneumatics descore('F', false); // descore on port F, retracted initially
+pros::adi::Pneumatics pulldown('C', true); // middle goal pulldown on port C, extended initially
 
 // ------------------------ Intake --------------------------
-pros::Motor intakeMotor(-18, pros::v5::MotorGears::blue); // intake motor on port 18
-pros::Motor topMotor(7, pros::v5::MotorGears::blue);     // top roller motor on port 7
+pros::Motor intakeMotor(-10, pros::v5::MotorGears::blue); // intake motor on port 18
+pros::Motor topMotor(1, pros::v5::MotorGears::blue);     // top roller motor on port 7
 
 // ------------------------ Sensors and Odometry ------------------------
 
@@ -120,5 +117,4 @@ lemlib::Chassis chassis(drivetrain, lateral_controller, angular_controller,
                         sensors, &throttleCurve, &steerCurve); 
 
 
-Color allianceColor = Color::RED;
 bool midgoal_first = false;

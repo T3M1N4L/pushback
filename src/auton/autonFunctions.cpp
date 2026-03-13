@@ -40,7 +40,7 @@ void score_longgoal(int voltage = 127)
 }
 
 
-void score_longgoal_auton(int voltage, Color allianceColor)
+void score_longgoal_auton(int voltage)
 {
     intakeMotor.move(voltage);
     topMotor.move(voltage);
@@ -55,30 +55,30 @@ void intake_stop()
     topMotor.move(0);
 }
 
-void score_midgoal(int voltage = 127)
+void score_midgoal(int voltage = 90)
 {
+    pulldown.retract();
     wing.extend();
     intakeMotor.move(voltage);
-    topMotor.move(-30);
+    topMotor.move(-20);
 }
 
 
 
-void resting_state(bool trapDoor_commanded)
+void resting_state()
 {
     intake_stop();
+    tongue.retract();
     wing.retract();
-    if (trapDoor_commanded) {
-        trapDoor.retract();
-    }
+    pulldown.extend();
 }
 
-void matchload_state(bool state)
+void pulldown_state(bool state)
 {
     if (state) {
-        matchload.extend();
+        pulldown.extend();
     } else {
-        matchload.retract();
+        pulldown.retract();
     }
 }
 
